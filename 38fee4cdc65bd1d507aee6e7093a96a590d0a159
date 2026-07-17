@@ -1,0 +1,14 @@
+Phase 1 complete, empty repo to a clean, buildable full-stack
+croquis. Established project-wide engineering law in CONVENTIONS.md: trust
+boundary, server-side-only secrets, RLS on every table, prompt-injection
+defence, single LLM abstraction, and the AI task registry. Frontend: Next.js
+14 App Router + TS + Tailwind/shadcn, NextAuth v5 (GitHub/Google) via the
+Supabase adapter, session middleware, and session-guarded, Zod-validated
+/api/profile handlers — builds with zero TS errors. Backend: FastAPI AI
+microservice with origin-locked CORS, slowapi rate limiting, structured
+logging, a timing-safe service-token guard on every protected route, and the
+CreatorContext model that will feed every Granite prompt. Database: initial
+migration with RLS enabled from line one and owner-only policies. Before
+building on this: run 001_initial_schema.sql in Supabase and confirm a live
+OAuth login persists a profile row under RLS. Next: Phase 2 — watsonx/Granite
+connectivity and the four LangFlow chains.
