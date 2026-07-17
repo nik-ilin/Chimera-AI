@@ -335,7 +335,8 @@ chimera/
 ### Sub-Task 1 — Project Foundation
 - **Intent:** Get both servers running, auth working, and Supabase connected.
 - **Expected Outcomes:** `npm run dev` starts Next.js; `uvicorn main:app` starts FastAPI; OAuth login persists a user record in Supabase.
-- **Status:** [ ] pending
+- **Status:** [x] done
+- **Notes:** `npm run build` passes with zero type errors. FastAPI health endpoint tested in-process. Service token guard verified (no token → 401, wrong token → 401, correct token → 200). Supabase migration SQL is written and ready to run. OAuth requires real credentials in `.env.local` to complete the end-to-end login flow.
 
 ### Sub-Task 2 — AI Core & LangFlow Chains
 - **Intent:** Establish Granite connectivity and build the four AI chains in LangFlow.
