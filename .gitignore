@@ -1,0 +1,44 @@
+# Chimera .gitignore
+# CONVENTIONS.md §1: Secrets — nothing committed.
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# LangFlow
+langflow/*.db
+langflow/logs/
+
+# Instagram session
+backend/instagram_session.json
