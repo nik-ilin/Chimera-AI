@@ -1,20 +1,24 @@
 /**
- * Next.js middleware.
+ * Next.js middleware (Edge runtime).
  *
- * Responsibilities:
- * 1. Refresh Supabase auth session on every request (keeps tokens alive).
- * 2. Protect authenticated routes — redirect unauthenticated users to /auth/signin.
+ * Optimistic route guard: redirects requests that carry NO NextAuth session
+ * cookie away from protected routes, straight to /auth/signin. This is a UX
+ * fast-path only — it checks for the *presence* of the session cookie, not its
+ * validity.
  *
- * Public routes (no auth required):
- *   /            landing page
- *   /auth/*      sign-in, error pages
- *   /api/auth/*  NextAuth handlers
+ * The AUTHORITATIVE auth check is always server-side: every protected Server
+ * Component and Route Handler calls `auth()` and rejects (redirect / 401) when
+ * the session is missing or invalid. See portal pages and /api/profile.
+ *
+ * Why not call `auth()` here? The full NextAuth instance (src/lib/auth.ts)
+ * pulls in the Supabase adapter and `jsonwebtoken` (Node crypto), neither of
+ * which runs on the Edge runtime. A cookie-presence check keeps the middleware
+ * Edge-safe while the DB-backed session strategy stays server-side.
  *
  * See CONVENTIONS.md §1: Sessions.
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_PATHS = ["/", "/auth/", "/api/auth/"];
 
@@ -22,50 +26,32 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p));
 }
 
-export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: { headers: request.headers },
-  });
+// NextAuth v5 session cookie names: plain over http (dev), __Secure- prefixed
+// over https (prod). We accept either so the guard works in both environments.
+const SESSION_COOKIES = [
+  "authjs.session-token",
+  "__Secure-authjs.session-token",
+];
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
+function hasSessionCookie(request: NextRequest): boolean {
+  return SESSION_COOKIES.some((name) => Boolean(request.cookies.get(name)?.value));
+}
 
-  // Refresh the session. This must be awaited before reading user data.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Redirect unauthenticated users away from protected routes.
-  if (!user && !isPublic(pathname)) {
+  if (isPublic(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (!hasSessionCookie(request)) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/auth/signin";
     redirectUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(redirectUrl);
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {

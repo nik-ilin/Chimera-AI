@@ -12,5 +12,10 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
     };
+    /**
+     * Supabase-compatible JWT (signed with SUPABASE_JWT_SECRET) used to
+     * authenticate PostgREST/Supabase requests as the owner under RLS.
+     */
+    supabaseAccessToken?: string;
   }
 }
