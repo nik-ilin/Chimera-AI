@@ -2,7 +2,7 @@
  * Supabase browser client (safe to use in Client Components).
  *
  * Uses the public anon key — safe because RLS policies restrict all
- * row access to the authenticated owner (auth.uid() = user_id).
+ * row access to the authenticated owner (next_auth.uid() = user_id).
  * See CONVENTIONS.md §1: Supabase.
  */
 import { createBrowserClient } from "@supabase/ssr";

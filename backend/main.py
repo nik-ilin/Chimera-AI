@@ -11,12 +11,11 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from config import settings
-from routes.health import router as health_router
+from limiter import limiter
 
 # ─── Structured logger ───────────────────────────────────────────────────────
 structlog.configure(
@@ -28,12 +27,17 @@ structlog.configure(
 )
 logger = structlog.get_logger()
 
-# ─── Rate limiter (per IP; per-user limits applied in route deps) ─────────────
-limiter = Limiter(key_func=get_remote_address)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from services.llm import get_llm_service
+    # Eagerly initialise the LLM service so misconfiguration fails at startup.
+    try:
+        svc = get_llm_service()
+        logger.info("llm_ready", provider=svc.provider_name)
+    except RuntimeError as exc:
+        logger.error("llm_init_failed", error=str(exc))
+        raise
     logger.info("chimera_backend_startup", env=settings.app_env)
     yield
     logger.info("chimera_backend_shutdown")
@@ -41,9 +45,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Chimera AI Service",
-    version="0.1.0",
+    version="0.2.0",
     description="Internal AI microservice for the Chimera platform.",
-    # Disable docs in production — no need to expose the API surface.
     docs_url="/docs" if settings.app_env == "development" else None,
     redoc_url=None,
     lifespan=lifespan,
@@ -63,4 +66,14 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
+from routes.health import router as health_router
+from routes.classify import router as classify_router
+from routes.captions import router as captions_router
+from routes.ghostwrite import router as ghostwrite_router
+from routes.visual_brief import router as visual_brief_router
+
 app.include_router(health_router, prefix="/api")
+app.include_router(classify_router, prefix="/api")
+app.include_router(captions_router, prefix="/api")
+app.include_router(ghostwrite_router, prefix="/api")
+app.include_router(visual_brief_router, prefix="/api")

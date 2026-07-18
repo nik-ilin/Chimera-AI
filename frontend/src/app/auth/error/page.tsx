@@ -1,6 +1,9 @@
 /**
  * Auth error page — shown by NextAuth when OAuth fails.
+ * force-dynamic: searchParams access + transitively imports NextAuth adapter.
  */
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 
 export default function AuthErrorPage({

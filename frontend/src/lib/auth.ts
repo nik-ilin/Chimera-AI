@@ -7,20 +7,37 @@
  * - OAuth client secrets never leave this file.
  * - Supabase user_profile row is created/updated via a JWT callback.
  *
- * NOTE: SupabaseAdapter requires url + secret at module load time. The
- * NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars must be
- * set before the dev server starts or a build runs. The || fallbacks below
- * are build-time placeholders only — they are never used at runtime.
+ * NOTE: SupabaseAdapter requires url + secret at module load time. We read
+ * NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY via requireEnv(),
+ * which throws a clear, named error if either is missing — so an empty or
+ * absent .env.local fails loudly at startup instead of surfacing later as a
+ * confusing Supabase "invalid API key" error.
  */
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 import { SupabaseAdapter } from "@auth/supabase-adapter";
 import jwt from "jsonwebtoken";
 
+/**
+ * Read a required environment variable, failing fast with a named error.
+ * Prevents an empty/missing .env.local from masquerading as an opaque
+ * "invalid key" error deep inside the Supabase adapter at request time.
+ */
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `[auth] Missing required environment variable: ${name}. ` +
+        `Set it in frontend/.env.local (see .env.example).`
+    );
+  }
+  return value;
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: SupabaseAdapter({
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
-    secret: process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-service-role-key",
+    url: requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    secret: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
   }),
   providers: [
     GitHub({
@@ -40,8 +57,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
      * authenticated user* (anon key + RLS), not as the service role.
      *
      * The token is signed with SUPABASE_JWT_SECRET and carries `sub = user.id`
-     * and `role = "authenticated"`, which is exactly what Postgres reads via
-     * auth.uid() / auth.role() to enforce the owner-only RLS policies.
+     * and `role = "authenticated"`. Postgres reads the `sub` claim via
+     * next_auth.uid() to enforce the owner-only RLS policies (migration 003).
      * See CONVENTIONS.md §1: Supabase, Sessions.
      */
     async session({ session, user }) {
