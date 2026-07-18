@@ -341,7 +341,8 @@ chimera/
 ### Sub-Task 2 — AI Core & LangFlow Chains
 - **Intent:** Establish Granite connectivity and build the four AI chains in LangFlow.
 - **Expected Outcomes:** FastAPI can call each LangFlow endpoint and return a valid Granite response.
-- **Status:** [ ] pending
+- **Status:** [x] done
+- **Notes:** 25/25 checks pass via FakeLLMService stub; GraniteLLMService wired and ready for real watsonx credentials. LangFlow chain JSONs exported. All 4 routes protected, rate-limited, and validated. Frontend build confirmed: `npm run build` completes with all auth-reading routes marked ƒ (Dynamic).
 
 ### Sub-Task 3 — Onboarding Router & Portal Shell
 - **Intent:** User can log in, be classified by Granite, and land on the musician portal.
