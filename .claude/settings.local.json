@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/nikolai/Desktop/Programacion/Python/Chimera AI /frontend/**)",
+      "Read(//Users/nikolai/Desktop/Programacion/Python/Chimera AI /backend/**)",
+      "Read(//Users/nikolai/Desktop/Programacion/Python/Chimera AI /backend/db/migrations/**)",
+      "Bash(git notes add -m 'Phase 1 complete, empty repo to a clean, buildable full-stack *)",
+      "Bash(git push *)",
+      "Bash(gh auth *)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(env)",
+      "Bash(git credential *)",
+      "Bash(cd \"/Users/nikolai/Desktop/Programacion/Python/Chimera AI /frontend\" && grep -rniE \"accessToken|supabaseAccessToken|jwt|sign\\\\\\(|jsonwebtoken|SUPABASE_JWT|global:|Authorization\" src/ | grep -v node_modules; echo \"--- session strategy ---\"; grep -rniE \"strategy|session:\" src/lib/auth.ts)",
+      "Read(//Users/nikolai/Desktop/Programacion/Python/Chimera AI /**)",
+      "Read(//Users/nikolai/Desktop/Programacion/Python/Chimera AI /src/lib/**)",
+      "Bash(grep -iE \"JWT|SERVICE_ROLE|ANON\" ../.env.example)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(lsof -iTCP:3000 -sTCP:LISTEN -n -P)",
+      "Bash(lsof -Pan -p 75791 -iTCP -sTCP:LISTEN)",
+      "Bash(lsof -iTCP:3001 -iTCP:3002 -iTCP:3003 -sTCP:LISTEN -n -P)",
+      "Bash(ps -p 57172 -o pid,command)",
+      "Bash(kill 75791)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(lsof -iTCP:3001 -sTCP:LISTEN -n -P)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" --max-time 8 http://localhost:3001/)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} en %{time_total}s\\\\n\" --max-time 45 http://localhost:3001/)",
+      "Bash(ps -p 76284 -o pid,%cpu,%mem,etime,state)",
+      "Bash(rm -rf .next)",
+      "Bash(ls -la .env.local)",
+      "Bash(break)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} en %{time_total}s\\\\n\" --max-time 40 http://localhost:3001/)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} en %{time_total}s\\\\n\" --max-time 90 http://127.0.0.1:3001/)"
+    ]
+  }
+}
