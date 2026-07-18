@@ -36,6 +36,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Claude Code / local agent config
+.claude/
+
 # LangFlow
 langflow/*.db
 langflow/logs/

@@ -23,9 +23,11 @@ Reference `chimera-plan.md` for architecture context.
 ### Supabase
 - **Row Level Security (RLS) is enabled on every table**, from first migration.  
 - All row-level policies must restrict access to the row's owner:  
-  `auth.uid() = user_id`  
+  `next_auth.uid() = user_id`  
+  (Identity comes from NextAuth via the minted Supabase JWT, not Supabase Auth.
+  Use `next_auth.uid()`, **not** `auth.uid()`, in every owner policy — see migration 003.)  
 - The **anon key is treated as public** — the DB must be safe even so.  
-- The **service-role key lives only in the FastAPI backend** (never in Next.js client or browser).
+- The **service-role key is used server-side only** — in FastAPI and in the Next.js Route Handlers / `SupabaseAdapter` — **never in the browser** (no `NEXT_PUBLIC_` prefix, never in a Client Component).
 
 ### Sessions
 - Validate the NextAuth v5 session **server-side** on every Route Handler and before every Supabase mutation.  
@@ -75,6 +77,7 @@ Reference `chimera-plan.md` for architecture context.
 - **Type safety:** generate TypeScript types from the Supabase schema (`supabase gen types`).  
   Share a single `types/api.ts` module for all API request/response shapes.
 - **Every AI call has four explicit UI states:** loading · empty · error · success.
+- **Known hazard — space in the workspace path:** the repo lives under `.../Chimera AI /` (note the space). This has stalled/failed CLI tools (ESLint during `next build`); it is worked around via `eslint.ignoreDuringBuilds` in `next.config.mjs`. If a CLI tool hangs or fails oddly, suspect the space in the path before deep-diagnosing.
 
 ---
 

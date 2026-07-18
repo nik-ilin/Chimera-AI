@@ -3,7 +3,7 @@
  *
  * Authenticates requests as the logged-in user by attaching the Supabase
  * JWT minted in the NextAuth session callback (anon key + Authorization
- * header). Postgres reads auth.uid()/auth.role() from that JWT to enforce
+ * header). Postgres reads next_auth.uid() from that JWT's `sub` claim to enforce
  * the owner-only RLS policies — so this client can only ever touch the
  * caller's own rows.
  *
