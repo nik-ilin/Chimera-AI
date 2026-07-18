@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # ── LangFlow ──
     langflow_base_url: str = "http://localhost:7860"
     langflow_api_key: str = ""
+    # Comma-separated "task_name:flow_uuid" pairs, e.g.
+    # "write_captions:abc-123,write_lyrics:def-456"
+    # Empty string = no LangFlow configured, fall back to direct Granite.
+    langflow_flow_ids: str = ""
 
     # ── HuggingFace ──
     huggingface_api_token: str = ""
