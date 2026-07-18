@@ -6,9 +6,11 @@ Uses the Granite build_image_brief task (temp=0.4, max_tokens=512).
 Service-token guarded. Rate-limited: 3/minute (image gen is expensive).
 
 CONVENTIONS.md §4: build_image_brief task.
-"""
-from __future__ import annotations
 
+NOTE: do NOT add `from __future__ import annotations` here — the slowapi
+@limiter.limit decorator swaps __globals__, breaking string-annotation
+resolution of the request body (FastAPI mis-binds it as a Query param).
+"""
 import uuid
 from typing import Literal
 

@@ -5,9 +5,13 @@ Classifies a creator by type using the Granite classify_creator task.
 Service-token guarded. Rate-limited per user (client IP).
 
 CONVENTIONS.md §4: classify_creator task, temp=0.2, max_tokens=256.
-"""
-from __future__ import annotations
 
+NOTE: do NOT add `from __future__ import annotations` here. The slowapi
+@limiter.limit decorator replaces the endpoint's __globals__ with slowapi's
+module, so string annotations (PEP 563) can no longer resolve the request
+model — FastAPI then mis-binds the body as a Query param and OpenAPI 500s.
+Real (non-stringized) annotations resolve correctly via __wrapped__.
+"""
 import uuid
 
 import structlog

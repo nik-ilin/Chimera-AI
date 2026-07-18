@@ -18,6 +18,7 @@ Usage
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -64,10 +65,19 @@ class GraniteLLMService(LLMService):
     """
 
     def __init__(self) -> None:
-        self._client: Any = None
+        # Cache ChatWatsonx clients keyed by their generation params, so the
+        # expensive IAM/init handshake runs ONCE per distinct config instead of
+        # on every request. A lock serialises concurrent first-builds.
+        self._clients: dict[tuple[float, int], Any] = {}
+        self._lock = asyncio.Lock()
 
-    def _get_client(self, params: TaskParams) -> Any:
-        """Build a ChatWatsonx instance for the given task params."""
+    def _build_client(self, params: TaskParams) -> Any:
+        """
+        Construct a ChatWatsonx instance for the given task params.
+
+        BLOCKING: the constructor performs the IAM/token handshake, so this must
+        only ever be called via asyncio.to_thread — never directly on the loop.
+        """
         # Deferred import — avoids network probe at module load time.
         from langchain_ibm import ChatWatsonx  # noqa: PLC0415
 
@@ -84,13 +94,33 @@ class GraniteLLMService(LLMService):
             },
         )
 
+    async def _get_client(self, params: TaskParams) -> Any:
+        """
+        Return a cached ChatWatsonx client for these params, building it once
+        (off the event loop, in a worker thread) on first use. decoding_method
+        is derived from temperature, so (temperature, max_tokens) is a
+        sufficient cache key.
+        """
+        key = (params.temperature, params.max_tokens)
+        client = self._clients.get(key)
+        if client is not None:
+            return client
+        async with self._lock:
+            # Re-check inside the lock: another coroutine may have built it
+            # while we were awaiting the lock.
+            client = self._clients.get(key)
+            if client is None:
+                client = await asyncio.to_thread(self._build_client, params)
+                self._clients[key] = client
+            return client
+
     async def generate(
         self,
         task_name: str,
         messages: list[BaseMessage],
         params: TaskParams,
     ) -> str:
-        client = self._get_client(params)
+        client = await self._get_client(params)
         if settings.log_level == "DEBUG":
             logger.debug(
                 "llm_call",
@@ -100,7 +130,10 @@ class GraniteLLMService(LLMService):
                     "messages": [m.content for m in messages],
                 },
             )
-        response = await client.ainvoke(messages)
+        # Run the BLOCKING inference in a worker thread so the event loop stays
+        # free (a second request isn't blocked) and an asyncio.wait_for timeout
+        # around this call can actually fire if watsonx is slow.
+        response = await asyncio.to_thread(client.invoke, messages)
         text = response.content if hasattr(response, "content") else str(response)
         if settings.log_level == "DEBUG":
             logger.debug("llm_response", extra={"task": task_name, "response": text})

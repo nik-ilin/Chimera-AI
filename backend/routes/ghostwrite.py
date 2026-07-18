@@ -8,9 +8,11 @@ Multi-turn lyric writing assistant.
 - Service-token guarded. Rate-limited: 10/minute.
 
 CONVENTIONS.md §4: write_lyrics task, multi-turn memory, temp=0.8.
-"""
-from __future__ import annotations
 
+NOTE: do NOT add `from __future__ import annotations` here — the slowapi
+@limiter.limit decorator swaps __globals__, breaking string-annotation
+resolution of the request body (FastAPI mis-binds it as a Query param).
+"""
 import json
 import uuid
 from typing import Literal

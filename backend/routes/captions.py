@@ -6,9 +6,11 @@ Runs 3 independent generations concurrently via asyncio.gather.
 Service-token guarded. Rate-limited: 10/minute per user.
 
 CONVENTIONS.md §4: write_captions task, temp=0.8, max_tokens=512.
-"""
-from __future__ import annotations
 
+NOTE: do NOT add `from __future__ import annotations` here — the slowapi
+@limiter.limit decorator swaps __globals__, breaking string-annotation
+resolution of the request body (FastAPI mis-binds it as a Query param).
+"""
 import uuid
 from typing import Literal
 
