@@ -37,7 +37,7 @@ const modules = [
       "Viral Instagram and TikTok captions with hashtag sets. Powered by Granite.",
     icon: PenLine,
     href: "/portal/musician/posts",
-    available: false, // Phase 3
+    available: true, // Phase 3 ✓
   },
   {
     id: "ghostwrite",
@@ -46,7 +46,7 @@ const modules = [
       "Lyric writing assistant with rhyme and meter guidance. Multi-turn sessions.",
     icon: Mic2,
     href: "/portal/musician/ghostwrite",
-    available: false, // Phase 3
+    available: true, // Phase 3 ✓
   },
 ];
 
