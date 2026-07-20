@@ -40,10 +40,14 @@ type FormValues = z.infer<typeof FormSchema>;
 
 // ─── Hook: streaming captions fetch ──────────────────────────────────────────
 
+type StreamStatus = "idle" | "sending" | "streaming" | "success" | "error";
+
 function useCaptionsStream() {
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<StreamStatus>("idle");
   const [result, setResult] = useState<CaptionsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [liveText, setLiveText] = useState("");
+  const [tokenCount, setTokenCount] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
   async function generate(
@@ -55,9 +59,11 @@ function useCaptionsStream() {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
 
-    setStatus("loading");
+    setStatus("sending");
     setResult(null);
     setError(null);
+    setLiveText("");
+    setTokenCount(0);
 
     try {
       const response = await fetch("/api/ai/captions", {
@@ -72,36 +78,44 @@ function useCaptionsStream() {
         throw new Error(errData.error ?? `HTTP ${response.status}`);
       }
 
-      // Read the SSE stream
+      // Read the SSE stream: {type:"token"|"result"|"error"}
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let acc = "";
+      let tokens = 0;
 
       while (reader) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
 
-        // Parse SSE events — each event is "data: {...}\n\n"
         const events = buffer.split("\n\n");
         buffer = events.pop() ?? "";
 
         for (const event of events) {
           const line = event.replace(/^data:\s*/m, "").trim();
           if (!line) continue;
+          let msg: { type?: string; text?: string; result?: CaptionsResult; error?: string };
           try {
-            const parsed = JSON.parse(line);
-            // FastAPI wraps in { request_id, result: { variants } }
-            const variants: CaptionVariant[] = parsed?.result?.variants ?? [];
-            setResult({ variants });
-            setStatus("success");
+            msg = JSON.parse(line);
           } catch {
-            // Partial chunk — wait for more
+            continue; // partial chunk — wait for more
+          }
+          if (msg.type === "token") {
+            acc += msg.text ?? "";
+            tokens += 1;
+            setLiveText(acc);
+            setTokenCount(tokens);
+            setStatus("streaming");
+          } else if (msg.type === "result") {
+            setResult({ variants: msg.result?.variants ?? [] });
+            setStatus("success");
+          } else if (msg.type === "error") {
+            throw new Error(msg.error ?? "Generation failed.");
           }
         }
       }
-
-      if (status !== "success") setStatus("success");
     } catch (err: unknown) {
       if ((err as Error)?.name === "AbortError") return;
       setError((err as Error)?.message ?? "Something went wrong.");
@@ -109,7 +123,7 @@ function useCaptionsStream() {
     }
   }
 
-  return { status, result, error, generate };
+  return { status, result, error, liveText, tokenCount, generate };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -119,8 +133,10 @@ interface PostWritingClientProps {
 }
 
 export default function PostWritingClient({ profileContext }: PostWritingClientProps) {
-  const { status, result, error, generate } = useCaptionsStream();
+  const { status, result, error, liveText, tokenCount, generate } = useCaptionsStream();
   const [copied, setCopied] = useState<number | null>(null);
+
+  const busy = status === "sending" || status === "streaming";
 
   const {
     register,
@@ -199,23 +215,41 @@ export default function PostWritingClient({ profileContext }: PostWritingClientP
         {/* Submit */}
         <button
           type="submit"
-          disabled={status === "loading"}
+          disabled={busy}
           className="self-start px-5 py-2 rounded-lg bg-chimera-purple text-white text-sm font-medium disabled:opacity-50"
         >
-          {status === "loading" ? "Generating…" : "Generate captions"}
+          {status === "sending"
+            ? "Sending…"
+            : status === "streaming"
+              ? "Generating…"
+              : "Generate captions"}
         </button>
       </form>
 
-      {/* ── Loading skeleton ── */}
-      {status === "loading" && (
-        <div className="flex flex-col gap-3" aria-live="polite" aria-label="Generating captions">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="border border-border rounded-lg p-4 animate-pulse">
-              <div className="h-3 bg-muted rounded w-3/4 mb-2" />
-              <div className="h-3 bg-muted rounded w-1/2 mb-4" />
-              <div className="h-2 bg-muted rounded w-1/3" />
-            </div>
-          ))}
+      {/* ── Progress + live stream (minimal, honest — no fake percentage) ── */}
+      {busy && (
+        <div
+          className="border border-border rounded-lg p-4 mb-2"
+          aria-live="polite"
+          aria-label="Generating captions"
+        >
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+            {/* Indeterminate animated indicator */}
+            <span className="inline-flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce" />
+            </span>
+            <span>{status === "sending" ? "Sending…" : "Generating…"}</span>
+            {status === "streaming" && (
+              <span className="ml-auto tabular-nums text-xs">{tokenCount} tokens</span>
+            )}
+          </div>
+          {liveText && (
+            <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto font-mono">
+              {liveText}
+            </pre>
+          )}
         </div>
       )}
 

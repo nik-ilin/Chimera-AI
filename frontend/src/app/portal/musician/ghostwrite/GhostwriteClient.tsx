@@ -56,8 +56,12 @@ export default function GhostwriteClient({
 }: GhostwriteClientProps) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "sending" | "streaming" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [liveText, setLiveText] = useState("");
+  const [tokenCount, setTokenCount] = useState(0);
+
+  const busy = status === "sending" || status === "streaming";
 
   // Settings
   const [genre, setGenre] = useState(defaultGenre);
@@ -77,11 +81,13 @@ export default function GhostwriteClient({
     setTurns([]);
     setStatus("idle");
     setError(null);
+    setLiveText("");
+    setTokenCount(0);
   }
 
   async function send() {
     const text = message.trim();
-    if (!text || status === "loading") return;
+    if (!text || busy) return;
     if (text.length > 8000) {
       setError("Message too long (max 8000 characters).");
       setStatus("error");
@@ -90,8 +96,10 @@ export default function GhostwriteClient({
 
     setTurns((t) => [...t, { role: "user", content: text }]);
     setMessage("");
-    setStatus("loading");
+    setStatus("sending");
     setError(null);
+    setLiveText("");
+    setTokenCount(0);
 
     try {
       const resp = await fetch("/api/ai/ghostwrite", {
@@ -113,10 +121,12 @@ export default function GhostwriteClient({
         throw new Error(errData.error ?? `HTTP ${resp.status}`);
       }
 
-      // Read the SSE stream (single "data: {...}" event for now)
+      // Read the SSE stream: {type:"session"|"token"|"result"|"error"}
       const reader = resp.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let acc = "";
+      let tokens = 0;
       let handled = false;
 
       while (reader) {
@@ -130,30 +140,43 @@ export default function GhostwriteClient({
         for (const event of events) {
           const line = event.replace(/^data:\s*/m, "").trim();
           if (!line) continue;
+          let msg: {
+            type?: string;
+            session_id?: string;
+            text?: string;
+            result?: LyricsResult;
+            error?: string;
+          };
           try {
-            const parsed = JSON.parse(line);
-            // Shape: { session_id, request_id, result: { sections, assistant_message } }
-            const result: LyricsResult | undefined = parsed?.result;
-            if (parsed?.session_id) setSessionId(parsed.session_id);
-            if (result) {
-              setTurns((t) => [
-                ...t,
-                {
-                  role: "assistant",
-                  content: result.assistant_message ?? "",
-                  result,
-                },
-              ]);
-              handled = true;
-            }
+            msg = JSON.parse(line);
           } catch {
-            // partial chunk — wait for more
+            continue; // partial chunk — wait for more
+          }
+          if (msg.type === "session" && msg.session_id) {
+            setSessionId(msg.session_id);
+          } else if (msg.type === "token") {
+            acc += msg.text ?? "";
+            tokens += 1;
+            setLiveText(acc);
+            setTokenCount(tokens);
+            setStatus("streaming");
+          } else if (msg.type === "result" && msg.result) {
+            const result = msg.result;
+            setTurns((t) => [
+              ...t,
+              { role: "assistant", content: result.assistant_message ?? "", result },
+            ]);
+            handled = true;
+          } else if (msg.type === "error") {
+            throw new Error(msg.error ?? "Generation failed.");
           }
         }
       }
 
       if (!handled) throw new Error("Empty AI response.");
       setStatus("idle");
+      setLiveText("");
+      setTokenCount(0);
     } catch (err: unknown) {
       setError((err as Error)?.message ?? "Something went wrong.");
       setStatus("error");
@@ -218,7 +241,7 @@ export default function GhostwriteClient({
 
       {/* ── Thread ── */}
       <div className="flex-1 overflow-y-auto py-6 flex flex-col gap-4">
-        {turns.length === 0 && status !== "loading" && (
+        {turns.length === 0 && !busy && (
           <div className="text-center text-sm text-muted-foreground py-16">
             <Mic2 className="w-6 h-6 mx-auto mb-3 text-chimera-purple" />
             Describe the song you want to write — mood, story, references.
@@ -266,13 +289,26 @@ export default function GhostwriteClient({
           )
         )}
 
-        {/* Loading bubble */}
-        {status === "loading" && (
-          <div className="self-start" aria-live="polite" aria-label="Writing lyrics">
-            <div className="border border-border rounded-2xl rounded-bl-sm px-4 py-3 animate-pulse w-64">
-              <div className="h-2.5 bg-muted rounded w-3/4 mb-2" />
-              <div className="h-2.5 bg-muted rounded w-1/2 mb-2" />
-              <div className="h-2.5 bg-muted rounded w-2/3" />
+        {/* Live streaming bubble + progress (honest — no fake percentage) */}
+        {busy && (
+          <div className="self-start max-w-[92%] w-full" aria-live="polite" aria-label="Writing lyrics">
+            <div className="border border-border rounded-2xl rounded-bl-sm px-4 py-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                <span className="inline-flex gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce [animation-delay:-0.3s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce [animation-delay:-0.15s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce" />
+                </span>
+                <span>{status === "sending" ? "Sending…" : "Generating…"}</span>
+                {status === "streaming" && (
+                  <span className="ml-auto tabular-nums">{tokenCount} tokens</span>
+                )}
+              </div>
+              {liveText && (
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto font-mono">
+                  {liveText}
+                </pre>
+              )}
             </div>
           </div>
         )}
@@ -306,7 +342,7 @@ export default function GhostwriteClient({
           />
           <button
             onClick={send}
-            disabled={status === "loading" || !message.trim()}
+            disabled={busy || !message.trim()}
             className="p-2.5 rounded-lg bg-chimera-purple text-white disabled:opacity-50"
             aria-label="Send"
           >

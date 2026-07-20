@@ -18,6 +18,9 @@
  * the SSE wire format ready for a streaming upgrade in Phase 4+.
  */
 export const dynamic = "force-dynamic";
+// Allow long, slow generations to stream without the platform killing the
+// request mid-stream (default is far shorter). Value in seconds.
+export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -107,26 +110,15 @@ export async function POST(request: Request) {
     );
   }
 
-  // ── Stream the response as Server-Sent Events ────────────────────────────────
-  // FastAPI returns one JSON payload. We emit it as a single SSE event so the
-  // browser can use the EventSource / ReadableStream pattern, and the wire
-  // format is ready for a real streaming upgrade when FastAPI adds SSE.
-  const data = await fastapiResponse.json();
-
-  const stream = new ReadableStream({
-    start(controller) {
-      const enc = new TextEncoder();
-      // SSE format: "data: <payload>\n\n"
-      controller.enqueue(enc.encode(`data: ${JSON.stringify(data)}\n\n`));
-      controller.close();
-    },
-  });
-
-  return new Response(stream, {
+  // ── Pipe the backend SSE stream straight through to the browser ─────────────
+  // FastAPI streams token deltas then a final "result" event. We forward the
+  // raw body unbuffered so tokens reach the client as they are produced.
+  return new Response(fastapiResponse.body, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }
