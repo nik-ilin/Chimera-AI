@@ -22,6 +22,7 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_core.messages import BaseMessage
@@ -47,6 +48,19 @@ class LLMService(ABC):
         """
         Call the model and return the raw text response.
         The caller is responsible for parsing/validating the JSON.
+        """
+        ...
+
+    @abstractmethod
+    def generate_stream(
+        self,
+        task_name: str,
+        messages: list[BaseMessage],
+        params: TaskParams,
+    ) -> AsyncIterator[str]:
+        """
+        Stream the model response as text deltas, in order, as they arrive.
+        The caller accumulates the full text and parses/validates it at the end.
         """
         ...
 
@@ -86,6 +100,11 @@ class GraniteLLMService(LLMService):
             url=settings.watsonx_url,
             apikey=settings.watsonx_api_key,
             project_id=settings.watsonx_project_id,
+            # Skip the get_model_specs() validation call at construction — it
+            # adds ~100s to time-to-first-token (and previously masked config
+            # errors as a long retry). The model id is trusted from config;
+            # a bad id surfaces immediately on the first inference call instead.
+            validate_model=False,
             params={
                 "temperature": params.temperature,
                 "max_new_tokens": params.max_tokens,
@@ -138,6 +157,45 @@ class GraniteLLMService(LLMService):
         if settings.log_level == "DEBUG":
             logger.debug("llm_response", extra={"task": task_name, "response": text})
         return text
+
+    async def generate_stream(
+        self,
+        task_name: str,
+        messages: list[BaseMessage],
+        params: TaskParams,
+    ) -> AsyncIterator[str]:
+        """
+        Stream text deltas from watsonx. The langchain-ibm sync `.stream()` is
+        run in a worker thread and its chunks are bridged to the event loop via
+        an asyncio.Queue, so the loop is never blocked while tokens arrive.
+        """
+        client = await self._get_client(params)
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+        done = object()
+
+        def produce() -> None:
+            try:
+                for chunk in client.stream(messages):
+                    text = chunk.content if hasattr(chunk, "content") else str(chunk)
+                    if text:
+                        loop.call_soon_threadsafe(queue.put_nowait, text)
+            except Exception as exc:  # surface to the consumer
+                loop.call_soon_threadsafe(queue.put_nowait, exc)
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, done)
+
+        producer = loop.run_in_executor(None, produce)
+        try:
+            while True:
+                item = await queue.get()
+                if item is done:
+                    break
+                if isinstance(item, BaseException):
+                    raise item
+                yield item
+        finally:
+            await producer
 
     @property
     def provider_name(self) -> str:
@@ -209,6 +267,21 @@ class FakeLLMService(LLMService):
             raise ValueError(f"FakeLLMService has no stub for task '{task_name}'")
         logger.warning("llm_fake_stub_used", extra={"task": task_name})
         return stub
+
+    async def generate_stream(
+        self,
+        task_name: str,
+        messages: list[BaseMessage],
+        params: TaskParams,
+    ) -> AsyncIterator[str]:
+        stub = self._STUBS.get(task_name)
+        if stub is None:
+            raise ValueError(f"FakeLLMService has no stub for task '{task_name}'")
+        logger.warning("llm_fake_stub_used", extra={"task": task_name})
+        # Emit the stub in small chunks so the streaming path is exercised in dev.
+        for i in range(0, len(stub), 24):
+            await asyncio.sleep(0.02)
+            yield stub[i : i + 24]
 
     @property
     def provider_name(self) -> str:

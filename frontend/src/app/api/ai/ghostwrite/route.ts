@@ -8,6 +8,8 @@
  * Security: browser never calls FastAPI. Token stays server-side.
  */
 export const dynamic = "force-dynamic";
+// Allow long, slow generations to stream without being killed mid-stream.
+export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -98,22 +100,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "AI service error", detail: errText }, { status: resp.status });
   }
 
-  const data = await resp.json();
-
-  // Stream as SSE — same pattern as captions
-  const stream = new ReadableStream({
-    start(controller) {
-      const enc = new TextEncoder();
-      controller.enqueue(enc.encode(`data: ${JSON.stringify(data)}\n\n`));
-      controller.close();
-    },
-  });
-
-  return new Response(stream, {
+  // Pipe the backend SSE stream straight through, unbuffered, so session /
+  // token / result events reach the client as they are produced.
+  return new Response(resp.body, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

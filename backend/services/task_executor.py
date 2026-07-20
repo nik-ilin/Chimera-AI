@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -239,6 +240,69 @@ class TaskExecutor:
         schema_cls.model_validate(parsed2)
         logger.info("task_success_after_repair", extra={"task": task_name, "request_id": request_id})
         return parsed2
+
+    # ── Streaming variant (CONVENTIONS.md §2 — token-by-token) ────────────────
+    async def stream_task(
+        self,
+        task_name: str,
+        prompt: str,
+        schema_cls: type,
+        request_id: str,
+    ) -> AsyncIterator[tuple[str, Any]]:
+        """
+        Stream a task token-by-token.
+
+        Yields:
+            ("token", <text delta>)  for each chunk as the model generates, then
+            ("result", <validated dict>)  once, at the end.
+
+        The full text is accumulated and parsed after the stream. On parse or
+        schema-validation failure it falls back to ONE non-streamed repair call
+        (whose result is emitted as the final "result"); a second failure raises.
+        """
+        llm = get_llm_service()
+        params = TASK_PARAMS[task_name]
+        messages = [HumanMessage(content=prompt)]
+
+        logger.info(
+            "task_stream_start",
+            extra={"task": task_name, "request_id": request_id, "provider": llm.provider_name},
+        )
+
+        full = ""
+        async for delta in llm.generate_stream(task_name, messages, params):
+            full += delta
+            yield ("token", delta)
+
+        parsed = _try_parse(full)
+        error_detail = ""
+        valid = False
+        if parsed is not None:
+            try:
+                schema_cls.model_validate(parsed)
+                valid = True
+            except ValidationError as e:
+                error_detail = str(e)
+        else:
+            error_detail = f"Response was not valid JSON. Raw: {full[:200]}"
+
+        if not valid:
+            logger.warning(
+                "task_stream_repair",
+                extra={"task": task_name, "request_id": request_id, "error": error_detail},
+            )
+            repair_prompt = prompt + _REPAIR_INSTRUCTION.format(error=error_detail)
+            raw2 = await llm.generate(task_name, [HumanMessage(content=repair_prompt)], params)
+            parsed = _try_parse(raw2)
+            if parsed is None:
+                raise ValueError(
+                    f"Task '{task_name}' failed after repair retry: "
+                    f"response is not valid JSON. Raw: {raw2[:300]}"
+                )
+            schema_cls.model_validate(parsed)  # let ValidationError propagate
+
+        logger.info("task_stream_success", extra={"task": task_name, "request_id": request_id})
+        yield ("result", parsed)
 
 
 def _try_parse(text: str) -> dict[str, Any] | None:
