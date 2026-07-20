@@ -62,9 +62,10 @@ export default async function LandingPage() {
 
         {/* Creator-type cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
-          {/* Musician — active */}
+          {/* Musician — active. Routes through onboarding; users with a
+              creator_type already set are forwarded straight to the portal. */}
           <Link
-            href={session?.user ? "/portal/musician" : "/auth/signin"}
+            href={session?.user ? "/onboarding" : "/auth/signin"}
             className="group border border-chimera-purple/30 rounded-xl p-6 bg-chimera-purple-muted/40 hover:bg-chimera-purple-muted transition-colors text-left"
           >
             <div className="w-10 h-10 rounded-lg bg-chimera-purple/10 flex items-center justify-center mb-3 group-hover:bg-chimera-purple/20 transition-colors">
