@@ -17,8 +17,8 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-geist-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
-        // Editorial display = the grotesque, used large with tight tracking.
-        display: ["var(--font-geist-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        // Editorial display serif (Fraunces) — vintage magazine feel.
+        display: ["var(--font-display)", "Georgia", "Times New Roman", "serif"],
       },
       colors: {
         background: "hsl(var(--background))",
