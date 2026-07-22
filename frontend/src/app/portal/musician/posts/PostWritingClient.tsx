@@ -3,16 +3,17 @@
  * Post Writing — Client Component.
  *
  * Form → calls /api/ai/captions (Route Handler, server-side token) →
- * reads SSE stream → renders 3 caption variants.
+ * reads SSE stream → renders caption variants.
  *
- * UI states: idle | loading | success | error
- * Streaming: reads EventSource-style SSE from the Route Handler.
- * CONVENTIONS.md §2: AI calls go through Route Handlers; client is lean.
+ * Stage B: presentation restyled only. The streaming hook, SSE parsing,
+ * progress states, and all wiring are unchanged from Stage A/A.5.
  */
 import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Sparkles, Copy, Check, Hash } from "lucide-react";
+import ImagePlaceholder from "@/components/ImagePlaceholder";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -149,6 +150,7 @@ export default function PostWritingClient({ profileContext }: PostWritingClientP
   });
 
   const contextValue = watch("context");
+  const platform = watch("platform");
 
   function onSubmit(values: FormValues) {
     generate(values.context, values.platform, profileContext);
@@ -161,92 +163,85 @@ export default function PostWritingClient({ profileContext }: PostWritingClientP
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="text-xl font-bold mb-1">Post Writing</h1>
-      <p className="text-sm text-muted-foreground mb-6">
-        Describe what the post is about. Granite will write 3 caption variants.
-      </p>
+    <div className="max-w-3xl mx-auto px-6 pb-20 pt-2">
+      {/* Heading */}
+      <div className="mb-8 animate-fade-up">
+        <div className="u-label text-muted-foreground mb-3">Caption studio</div>
+        <h1 className="font-display text-4xl sm:text-5xl font-semibold tracking-tight text-foreground mb-2">
+          Post <span className="text-chimera-clay">Writing</span>
+        </h1>
+        <p className="text-sm text-muted-foreground max-w-md">
+          Describe the post — we&apos;ll write three platform-native caption variants,
+          streaming as they&apos;re composed.
+        </p>
+      </div>
 
       {/* ── Form ── */}
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 mb-8">
-        {/* Context textarea */}
-        <div className="flex flex-col gap-1">
-          <label htmlFor="context" className="text-sm font-medium">
-            What's the post about?
-          </label>
+      <form onSubmit={handleSubmit(onSubmit)} className="animate-fade-up" style={{ animationDelay: "60ms" }}>
+        <div className="widget p-2">
           <textarea
             id="context"
             rows={4}
             placeholder="e.g. New single 'Neon Rain' dropping Friday — recorded in Berlin, dark pop vibes, collab with DJ Lens."
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background resize-none focus:outline-none focus:ring-2 focus:ring-chimera-purple/40"
+            className="w-full bg-transparent rounded-2xl px-4 py-3 text-sm resize-none focus:outline-none placeholder:text-muted-foreground/60"
             {...register("context")}
           />
-          <div className="flex justify-between">
-            {errors.context ? (
-              <span className="text-xs text-destructive">{errors.context.message}</span>
-            ) : (
-              <span />
-            )}
-            <span className="text-xs text-muted-foreground">{contextValue?.length ?? 0}/2000</span>
+          <div className="flex items-center justify-between gap-3 px-3 pb-2">
+            {/* Platform pills */}
+            <div className="flex gap-1.5 p-1 rounded-pill bg-secondary/70">
+              {(["instagram", "tiktok"] as const).map((p) => (
+                <label
+                  key={p}
+                  className={[
+                    "cursor-pointer rounded-pill px-3.5 py-1.5 text-xs font-medium capitalize transition-colors",
+                    platform === p
+                      ? "bg-card text-foreground shadow-soft"
+                      : "text-muted-foreground hover:text-foreground",
+                  ].join(" ")}
+                >
+                  <input type="radio" value={p} {...register("platform")} className="sr-only" />
+                  {p}
+                </label>
+              ))}
+            </div>
+            <span className="font-mono text-[11px] text-muted-foreground/70 shrink-0">
+              {contextValue?.length ?? 0}/2000
+            </span>
           </div>
         </div>
-
-        {/* Platform toggle */}
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium">Platform</label>
-          <div className="flex gap-2">
-            {(["instagram", "tiktok"] as const).map((p) => (
-              <label
-                key={p}
-                className="flex items-center gap-1.5 text-sm cursor-pointer"
-              >
-                <input
-                  type="radio"
-                  value={p}
-                  {...register("platform")}
-                  className="accent-chimera-purple"
-                />
-                <span className="capitalize">{p}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Submit */}
+        {errors.context && (
+          <span className="block mt-2 text-xs text-destructive">{errors.context.message}</span>
+        )}
         <button
           type="submit"
           disabled={busy}
-          className="self-start px-5 py-2 rounded-lg bg-chimera-purple text-white text-sm font-medium disabled:opacity-50"
+          className="mt-4 inline-flex items-center gap-2 px-5 py-3 rounded-pill bg-chimera-clay text-chimera-cream text-sm font-medium shadow-clay-glow transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
         >
-          {status === "sending"
-            ? "Sending…"
-            : status === "streaming"
-              ? "Generating…"
-              : "Generate captions"}
+          <Sparkles className="w-4 h-4" />
+          {status === "sending" ? "Sending…" : status === "streaming" ? "Generating…" : "Generate captions"}
         </button>
       </form>
 
-      {/* ── Progress + live stream (minimal, honest — no fake percentage) ── */}
+      {/* ── Progress + live stream ── */}
       {busy && (
-        <div
-          className="border border-border rounded-lg p-4 mb-2"
-          aria-live="polite"
-          aria-label="Generating captions"
-        >
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-            {/* Indeterminate animated indicator */}
+        <div className="mt-8 widget p-5 animate-scale-in" aria-live="polite" aria-label="Generating captions">
+          <div className="flex items-center gap-2.5 text-sm text-muted-foreground mb-3">
             <span className="inline-flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce" />
+              <span className="w-1.5 h-1.5 rounded-full bg-chimera-clay animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-chimera-clay animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-chimera-clay animate-bounce" />
             </span>
-            <span>{status === "sending" ? "Sending…" : "Generating…"}</span>
+            <span className="font-medium text-foreground">
+              {status === "sending" ? "Sending…" : "Generating…"}
+            </span>
             {status === "streaming" && (
-              <span className="ml-auto tabular-nums text-xs">{tokenCount} tokens</span>
+              <span className="ml-auto font-mono text-xs text-muted-foreground tabular-nums">
+                {tokenCount} tokens
+              </span>
             )}
           </div>
           {liveText && (
-            <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto font-mono">
+            <pre className="stream-text text-xs text-muted-foreground max-h-52 overflow-y-auto rounded-2xl bg-secondary/50 p-3">
               {liveText}
             </pre>
           )}
@@ -255,44 +250,56 @@ export default function PostWritingClient({ profileContext }: PostWritingClientP
 
       {/* ── Error state ── */}
       {status === "error" && error && (
-        <div className="border border-destructive/40 bg-destructive/5 rounded-lg px-4 py-3 text-sm text-destructive">
+        <div className="mt-8 rounded-widget border border-destructive/30 bg-destructive/5 px-5 py-4 text-sm text-destructive animate-scale-in">
           <strong>Error:</strong> {error}
         </div>
       )}
 
       {/* ── Success: caption variants ── */}
       {status === "success" && result && (
-        <div className="flex flex-col gap-4" aria-live="polite">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            {result.variants.length} variants generated
-          </h2>
+        <div className="mt-8 flex flex-col gap-4" aria-live="polite">
+          <div className="u-label text-muted-foreground">
+            {result.variants.length} variants · {platform}
+          </div>
           {result.variants.map((v, idx) => (
-            <div key={idx} className="border border-border rounded-lg p-4 flex flex-col gap-3">
-              {/* Caption text */}
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{v.text}</p>
+            <div
+              key={idx}
+              className="widget p-5 flex flex-col gap-3.5 animate-fade-up"
+              style={{ animationDelay: `${idx * 80}ms` }}
+            >
+              <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">{v.text}</p>
 
-              {/* Hashtags */}
               {v.hashtags.length > 0 && (
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1.5">
                   {v.hashtags.map((tag) => (
                     <span
                       key={tag}
-                      className="text-xs bg-chimera-purple-muted text-chimera-purple px-2 py-0.5 rounded-full"
+                      className="inline-flex items-center gap-0.5 text-xs bg-chimera-clay-muted text-chimera-clay px-2.5 py-1 rounded-pill font-medium"
                     >
-                      {tag}
+                      <Hash className="w-2.5 h-2.5" />
+                      {tag.replace(/^#/, "")}
                     </span>
                   ))}
                 </div>
               )}
 
-              {/* Footer: char count + copy */}
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{v.char_count} chars</span>
+              <div className="flex items-center justify-between pt-1 border-t border-border/70">
+                <span className="font-mono text-[11px] text-muted-foreground pt-3">
+                  {v.char_count} chars
+                </span>
                 <button
                   onClick={() => copyToClipboard(v.text, idx)}
-                  className="px-3 py-1 rounded border border-border hover:bg-muted transition-colors"
+                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill border border-border text-xs hover:bg-secondary transition-colors"
                 >
-                  {copied === idx ? "Copied!" : "Copy"}
+                  {copied === idx ? (
+                    <>
+                      <Check className="w-3 h-3 text-chimera-clay" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" /> Copy
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -302,9 +309,17 @@ export default function PostWritingClient({ profileContext }: PostWritingClientP
 
       {/* ── Empty state ── */}
       {status === "idle" && (
-        <p className="text-sm text-muted-foreground">
-          Fill in the form above and click Generate.
-        </p>
+        <div className="mt-10 flex flex-col items-center text-center animate-fade-up" style={{ animationDelay: "140ms" }}>
+          <ImagePlaceholder
+            id="posts-empty"
+            aspect="1/1"
+            note="Caption studio empty-state mark"
+            className="max-w-[160px]"
+          />
+          <p className="mt-4 text-sm text-muted-foreground max-w-xs">
+            Fill in the brief above and hit generate — your captions appear here.
+          </p>
+        </div>
       )}
     </div>
   );
