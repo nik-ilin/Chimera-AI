@@ -2,19 +2,15 @@
 /**
  * Ghostwriting — chat-style Client Component.
  *
- * Multi-turn lyric assistant:
- * - Sends user messages to /api/ai/ghostwrite (Route Handler, server token).
- * - Carries session_id across turns so the backend threads the conversation
- *   (lyric_sessions table, windowed history + rolling summary).
- * - Renders structured lyric sections (verse/chorus/…, rhyme labels, syllables)
- *   plus the assistant's note.
- * - "New session" clears the thread and starts a fresh session server-side.
+ * Multi-turn lyric assistant. Stage B restyled presentation only — the SSE
+ * streaming, session_id handling, progress states, and all wiring are
+ * unchanged from Stage A/A.5.
  *
- * UI states: idle | loading | success | error  (CONVENTIONS.md §2)
- * Streaming: reads the Route Handler's SSE wire format (single event for now).
+ * UI states: idle | sending | streaming | error  (CONVENTIONS.md §2)
  */
 import { useState, useRef, useEffect } from "react";
-import { Mic2, Plus, SendHorizonal } from "lucide-react";
+import { Plus, SendHorizonal } from "lucide-react";
+import ImagePlaceholder from "@/components/ImagePlaceholder";
 
 // ─── Types (mirror backend WriteLyricsOutput) ─────────────────────────────────
 
@@ -183,44 +179,31 @@ export default function GhostwriteClient({
     }
   }
 
+  const inputCls =
+    "rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-chimera-clay/30 transition-shadow";
+
   return (
-    <div className="flex-1 flex flex-col max-w-3xl w-full mx-auto px-4">
+    <div className="flex-1 flex flex-col max-w-3xl w-full mx-auto px-6 pb-6 min-h-0">
       {/* ── Settings bar ── */}
-      <div className="flex flex-wrap items-end gap-3 py-4 border-b border-border">
-        <label className="flex flex-col gap-1 text-xs font-medium">
+      <div className="widget p-3 flex flex-wrap items-end gap-2.5 animate-fade-up">
+        <label className="flex flex-col gap-1 u-label text-muted-foreground">
           Genre
-          <input
-            value={genre}
-            onChange={(e) => setGenre(e.target.value)}
-            maxLength={100}
-            className="border border-border rounded-md px-2 py-1.5 text-sm bg-background w-28 focus:outline-none focus:ring-2 focus:ring-chimera-purple/40"
-          />
+          <input value={genre} onChange={(e) => setGenre(e.target.value)} maxLength={100} className={`${inputCls} w-28`} />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium">
+        <label className="flex flex-col gap-1 u-label text-muted-foreground">
           Theme
-          <input
-            value={theme}
-            onChange={(e) => setTheme(e.target.value)}
-            maxLength={500}
-            placeholder="optional"
-            className="border border-border rounded-md px-2 py-1.5 text-sm bg-background w-36 focus:outline-none focus:ring-2 focus:ring-chimera-purple/40"
-          />
+          <input value={theme} onChange={(e) => setTheme(e.target.value)} maxLength={500} placeholder="optional" className={`${inputCls} w-36`} />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium">
+        <label className="flex flex-col gap-1 u-label text-muted-foreground">
           Rhyme
-          <input
-            value={rhymeScheme}
-            onChange={(e) => setRhymeScheme(e.target.value)}
-            maxLength={20}
-            className="border border-border rounded-md px-2 py-1.5 text-sm bg-background w-20 focus:outline-none focus:ring-2 focus:ring-chimera-purple/40"
-          />
+          <input value={rhymeScheme} onChange={(e) => setRhymeScheme(e.target.value)} maxLength={20} className={`${inputCls} w-20`} />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium">
+        <label className="flex flex-col gap-1 u-label text-muted-foreground">
           Section
           <select
             value={targetSection}
             onChange={(e) => setTargetSection(e.target.value as SectionType)}
-            className="border border-border rounded-md px-2 py-1.5 text-sm bg-background capitalize focus:outline-none focus:ring-2 focus:ring-chimera-purple/40"
+            className={`${inputCls} capitalize`}
           >
             {SECTIONS.map((s) => (
               <option key={s} value={s} className="capitalize">
@@ -231,7 +214,7 @@ export default function GhostwriteClient({
         </label>
         <button
           onClick={newSession}
-          className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border hover:bg-muted transition-colors"
+          className="ml-auto self-center inline-flex items-center gap-1.5 u-label px-3.5 py-2 rounded-pill border border-border hover:bg-secondary transition-colors"
           title="Start a fresh lyric session"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -240,37 +223,40 @@ export default function GhostwriteClient({
       </div>
 
       {/* ── Thread ── */}
-      <div className="flex-1 overflow-y-auto py-6 flex flex-col gap-4">
+      <div className="flex-1 overflow-y-auto py-6 flex flex-col gap-5 min-h-0">
         {turns.length === 0 && !busy && (
-          <div className="text-center text-sm text-muted-foreground py-16">
-            <Mic2 className="w-6 h-6 mx-auto mb-3 text-chimera-purple" />
-            Describe the song you want to write — mood, story, references.
-            <br />
-            The assistant remembers the whole session.
+          <div className="flex flex-col items-center text-center text-sm text-muted-foreground py-10 animate-fade-up">
+            <ImagePlaceholder
+              id="ghostwrite-empty"
+              aspect="1/1"
+              note="Blank lyric session mark"
+              className="max-w-[150px] mb-5"
+            />
+            <p className="max-w-xs">
+              Describe the song you want to write — mood, story, references.
+              The assistant remembers the whole session.
+            </p>
           </div>
         )}
 
         {turns.map((turn, idx) =>
           turn.role === "user" ? (
-            <div key={idx} className="self-end max-w-[85%]">
-              <div className="bg-chimera-purple text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm whitespace-pre-wrap">
+            <div key={idx} className="self-end max-w-[85%] animate-fade-up">
+              <div className="bg-chimera-clay text-chimera-cream rounded-widget rounded-br-lg px-4 py-3 text-sm whitespace-pre-wrap shadow-soft">
                 {turn.content}
               </div>
             </div>
           ) : (
-            <div key={idx} className="self-start max-w-[92%] w-full">
-              <div className="border border-border rounded-2xl rounded-bl-sm px-4 py-3 flex flex-col gap-3">
-                {/* Lyric sections */}
+            <div key={idx} className="self-start max-w-[94%] w-full animate-fade-up">
+              <div className="widget px-5 py-4 flex flex-col gap-4">
                 {turn.result?.sections.map((section, sIdx) => (
                   <div key={sIdx}>
-                    <div className="text-[10px] font-semibold uppercase tracking-widest text-chimera-purple mb-1.5">
-                      {section.type}
-                    </div>
-                    <div className="flex flex-col gap-0.5">
+                    <div className="u-label text-chimera-clay mb-2">{section.type}</div>
+                    <div className="flex flex-col gap-1">
                       {section.lines.map((ln, lIdx) => (
-                        <div key={lIdx} className="flex items-baseline gap-2 text-sm">
-                          <span className="flex-1 whitespace-pre-wrap">{ln.text}</span>
-                          <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                        <div key={lIdx} className="flex items-baseline gap-3 text-sm">
+                          <span className="flex-1 whitespace-pre-wrap leading-relaxed">{ln.text}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground tabular-nums shrink-0 bg-secondary/70 rounded-md px-1.5 py-0.5">
                             {ln.rhyme_label} · {ln.syllable_count}
                           </span>
                         </div>
@@ -278,9 +264,8 @@ export default function GhostwriteClient({
                     </div>
                   </div>
                 ))}
-                {/* Assistant note */}
                 {turn.content && (
-                  <p className="text-xs text-muted-foreground border-t border-border pt-2">
+                  <p className="text-xs text-muted-foreground border-t border-border/70 pt-3 leading-relaxed">
                     {turn.content}
                   </p>
                 )}
@@ -289,23 +274,25 @@ export default function GhostwriteClient({
           )
         )}
 
-        {/* Live streaming bubble + progress (honest — no fake percentage) */}
+        {/* Live streaming bubble + progress */}
         {busy && (
-          <div className="self-start max-w-[92%] w-full" aria-live="polite" aria-label="Writing lyrics">
-            <div className="border border-border rounded-2xl rounded-bl-sm px-4 py-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+          <div className="self-start max-w-[94%] w-full animate-scale-in" aria-live="polite" aria-label="Writing lyrics">
+            <div className="widget px-5 py-4">
+              <div className="flex items-center gap-2.5 text-xs text-muted-foreground mb-2.5">
                 <span className="inline-flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce [animation-delay:-0.3s]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce [animation-delay:-0.15s]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-chimera-purple animate-bounce" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-chimera-clay animate-bounce [animation-delay:-0.3s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-chimera-clay animate-bounce [animation-delay:-0.15s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-chimera-clay animate-bounce" />
                 </span>
-                <span>{status === "sending" ? "Sending…" : "Generating…"}</span>
+                <span className="font-medium text-foreground">
+                  {status === "sending" ? "Sending…" : "Generating…"}
+                </span>
                 {status === "streaming" && (
-                  <span className="ml-auto tabular-nums">{tokenCount} tokens</span>
+                  <span className="ml-auto font-mono tabular-nums">{tokenCount} tokens</span>
                 )}
               </div>
               {liveText && (
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto font-mono">
+                <pre className="stream-text text-xs text-muted-foreground max-h-52 overflow-y-auto rounded-2xl bg-secondary/50 p-3">
                   {liveText}
                 </pre>
               )}
@@ -315,7 +302,7 @@ export default function GhostwriteClient({
 
         {/* Error */}
         {status === "error" && error && (
-          <div className="self-center border border-destructive/40 bg-destructive/5 rounded-lg px-4 py-2.5 text-sm text-destructive">
+          <div className="self-center rounded-widget border border-destructive/30 bg-destructive/5 px-5 py-3 text-sm text-destructive animate-scale-in">
             <strong>Error:</strong> {error}
           </div>
         )}
@@ -324,8 +311,8 @@ export default function GhostwriteClient({
       </div>
 
       {/* ── Composer ── */}
-      <div className="border-t border-border py-4">
-        <div className="flex items-end gap-2">
+      <div className="shrink-0">
+        <div className="widget p-2 flex items-end gap-2">
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
@@ -338,20 +325,20 @@ export default function GhostwriteClient({
             rows={2}
             maxLength={8000}
             placeholder="Write me a verse about leaving home at night…  (Enter to send, Shift+Enter for newline)"
-            className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-background resize-none focus:outline-none focus:ring-2 focus:ring-chimera-purple/40"
+            className="flex-1 bg-transparent rounded-2xl px-3 py-2 text-sm resize-none focus:outline-none placeholder:text-muted-foreground/60"
           />
           <button
             onClick={send}
             disabled={busy || !message.trim()}
-            className="p-2.5 rounded-lg bg-chimera-purple text-white disabled:opacity-50"
+            className="p-3 rounded-2xl bg-chimera-clay text-chimera-cream shadow-clay-glow transition-all hover:brightness-105 active:scale-95 disabled:opacity-40"
             aria-label="Send"
           >
             <SendHorizonal className="w-4 h-4" />
           </button>
         </div>
         {sessionId && (
-          <p className="text-[10px] text-muted-foreground mt-1.5">
-            Session {sessionId.slice(0, 8)}… — the assistant remembers previous turns.
+          <p className="font-mono text-[10px] text-muted-foreground mt-2 text-center">
+            session {sessionId.slice(0, 8)}… · the assistant remembers previous turns
           </p>
         )}
       </div>

@@ -42,16 +42,15 @@ export default async function GhostwritePage() {
 
   return (
     <main className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-border px-6 py-4 flex items-center gap-3">
+      <header className="w-full max-w-3xl mx-auto px-6 py-5 flex items-center gap-3 shrink-0">
         <Link
           href="/portal/musician"
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-pill border border-border px-3 py-1.5 hover:bg-card"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-3.5 h-3.5" />
           Portal
         </Link>
-        <span className="text-muted-foreground">/</span>
-        <span className="text-sm font-medium text-foreground">Ghostwriting</span>
+        <span className="u-label text-chimera-clay">Ghostwriting</span>
       </header>
       <GhostwriteClient
         profileContext={profileContext}
