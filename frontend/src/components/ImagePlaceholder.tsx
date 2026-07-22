@@ -58,15 +58,15 @@ export default function ImagePlaceholder({
     <div
       style={style}
       data-image-placeholder={id}
-      className={`${rounded} ${className} relative w-full overflow-hidden border border-dashed border-foreground/20 bg-chimera-sand/60 flex items-center justify-center select-none`}
+      className={`${rounded} ${className} relative w-full overflow-hidden border border-border/70 flex items-center justify-center select-none`}
     >
-      {/* subtle diagonal hatch */}
+      {/* soft warm wash — no hard lines */}
       <div
         aria-hidden
-        className="absolute inset-0 opacity-[0.06]"
+        className="absolute inset-0"
         style={{
-          backgroundImage:
-            "repeating-linear-gradient(45deg, currentColor 0, currentColor 1px, transparent 1px, transparent 10px)",
+          background:
+            "radial-gradient(120% 120% at 20% 15%, hsl(var(--chimera-clay) / 0.10), transparent 55%), radial-gradient(120% 120% at 90% 95%, hsl(var(--chimera-plum) / 0.08), transparent 55%), hsl(var(--chimera-sand) / 0.5)",
         }}
       />
       <div className="relative text-center px-4 py-3">

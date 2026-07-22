@@ -17,7 +17,8 @@ those are **direction only**, never to be reproduced.
 
 | id | used in | aspect | orientation | description (subject · mood) |
 |----|---------|--------|-------------|------------------------------|
-| `landing-hero` | `frontend/src/app/page.tsx` (hero) | 4/5 | portrait | Abstract editorial artwork evoking an AI-native record label — layered light, chromatic ink bloom on warm paper. Calm, premium, mysterious. |
+| `landing-hero` | `frontend/src/app/page.tsx` (hero spread, back layer, parallax) | 4/5 | portrait | Abstract editorial artwork evoking an AI-native record label — layered light, chromatic ink bloom on warm paper. Calm, premium, mysterious. Sits rotated ~2°, parallaxes slowly. |
+| `landing-detail` | `frontend/src/app/page.tsx` (hero spread, front layer, parallax) | 1/1 | square | Close-up detail crop that pairs with `landing-hero` — grain, warm light, a texture/instrument fragment. Overlaps the hero, rotated ~-3°, parallaxes faster (depth). |
 | `landing-texture` | `frontend/src/app/page.tsx` (footer band) | 16/6 | wide | Soft grain/gradient texture strip in cream→clay tones. Subtle, decorative, no subject. |
 | `onboarding-aside` | `frontend/src/app/onboarding/OnboardingClient.tsx` (aside) | 3/4 | portrait | Quiet conceptual image of a lone creator/instrument silhouette in warm light. Editorial, contemplative. |
 | `portal-avatar` | `frontend/src/app/portal/musician/page.tsx` (profile block) | 1/1 | square | User avatar fallback — abstract warm gradient monogram tile. |

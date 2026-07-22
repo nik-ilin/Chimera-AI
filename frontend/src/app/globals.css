@@ -14,9 +14,17 @@
 :root {
   --radius: 1.1rem;
 
-  /* ── Warm beige canvas ── */
-  --background: 42 40% 91%;      /* warm cream */
-  --foreground: 28 16% 13%;      /* warm near-black ink */
+  /* ── Motion tokens (durations + easings) ── */
+  --dur-fast: 0.28s;
+  --dur: 0.55s;
+  --dur-slow: 0.9s;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);   /* easeOutExpo — editorial */
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+  --reveal-y: 18px;
+
+  /* ── Warm cream canvas ── */
+  --background: 40 42% 91%;      /* warm cream */
+  --foreground: 26 18% 12%;      /* warm near-black ink */
 
   --card: 44 50% 96%;            /* elevated warm surface */
   --card-foreground: 28 16% 13%;
@@ -39,23 +47,27 @@
   --destructive: 8 58% 46%;      /* muted brick */
   --destructive-foreground: 44 46% 96%;
 
-  --border: 38 24% 82%;
-  --input: 38 24% 82%;
-  --ring: 18 54% 47%;            /* clay */
+  --border: 36 22% 81%;
+  --input: 36 22% 81%;
+  --ring: 14 40% 44%;            /* clay */
 
-  /* ── Chimera accents (fusion: clay primary, plum heritage) ── */
-  --chimera-clay: 18 54% 47%;        /* terracotta */
-  --chimera-clay-muted: 22 48% 88%;
-  --chimera-plum: 288 22% 40%;       /* deep muted plum */
-  --chimera-plum-muted: 288 24% 90%;
-  --chimera-ink: 30 16% 11%;         /* dark contrast widget bg */
-  --chimera-cream: 44 48% 95%;       /* text on ink / elevated */
-  --chimera-sand: 40 30% 85%;
-  --chimera-gold: 34 66% 52%;
+  /* ── Chimera accents (muted vintage terracotta + plum heritage) ── */
+  --chimera-clay: 14 40% 44%;        /* muted vintage terracotta */
+  --chimera-clay-muted: 20 36% 86%;
+  --chimera-plum: 290 18% 38%;       /* deep dusty plum */
+  --chimera-plum-muted: 288 20% 89%;
+  --chimera-ink: 28 16% 11%;         /* dark contrast widget bg */
+  --chimera-cream: 42 46% 95%;       /* text on ink / elevated */
+  --chimera-sand: 38 28% 84%;
+  --chimera-gold: 32 44% 50%;
 
   /* Legacy aliases → plum, so any stray refs stay on-brand */
-  --chimera-purple: 288 22% 40%;
-  --chimera-purple-muted: 288 24% 90%;
+  --chimera-purple: 290 18% 38%;
+  --chimera-purple-muted: 288 20% 89%;
+
+  /* Cursor position (updated by LivingBackground) for the reactive glow */
+  --cursor-x: 50%;
+  --cursor-y: 30%;
 }
 
 @layer base {
@@ -110,5 +122,118 @@
     font-family: var(--font-geist-mono), ui-monospace, monospace;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  /* Editorial display face */
+  .font-editorial {
+    font-family: var(--font-display), Georgia, "Times New Roman", serif;
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+  }
+
+  /* Coordinate / index detail mark (ardène "(01)", "43.70° N") */
+  .u-coord {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.02em;
+    color: hsl(var(--muted-foreground));
+  }
+}
+
+@layer utilities {
+  /* ── Scroll reveal (driven by IntersectionObserver adding .is-visible) ── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(var(--reveal-y));
+    transition:
+      opacity var(--dur) var(--ease),
+      transform var(--dur) var(--ease);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+  .reveal.reveal-scale {
+    transform: translateY(var(--reveal-y)) scale(0.98);
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* ── Page-transition (app/template.tsx re-mounts on navigation) ── */
+  .page-enter {
+    animation: page-in var(--dur) var(--ease) both;
+  }
+
+  /* ── Living background layers ── */
+  .living-bg {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        60rem 60rem at var(--cursor-x) var(--cursor-y),
+        hsl(var(--chimera-clay) / 0.10),
+        transparent 60%
+      ),
+      radial-gradient(50rem 40rem at 12% 8%, hsl(var(--chimera-plum) / 0.06), transparent 55%),
+      radial-gradient(60rem 50rem at 92% 100%, hsl(var(--chimera-gold) / 0.07), transparent 55%);
+    background-color: hsl(var(--background));
+    animation: bg-drift 22s var(--ease) infinite alternate;
+    transition: background-position 0.6s var(--ease);
+  }
+  .grain {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.04;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ── Seamless marquee ── */
+  .marquee {
+    display: flex;
+    width: max-content;
+    animation: marquee 32s linear infinite;
+  }
+  .marquee-slow {
+    animation-duration: 48s;
+  }
+  .group\/marquee:hover .marquee {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bg-drift {
+  from { background-position: 0% 0%, 0% 0%, 0% 0%; }
+  to { background-position: 0% 0%, 4% 6%, -4% -6%; }
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ── Respect reduced-motion — disable non-essential motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .living-bg {
+    animation: none !important;
   }
 }

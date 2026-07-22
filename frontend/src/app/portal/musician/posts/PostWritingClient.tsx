@@ -187,16 +187,19 @@ export default function PostWritingClient({ profileContext }: PostWritingClientP
             {...register("context")}
           />
           <div className="flex items-center justify-between gap-3 px-3 pb-2">
-            {/* Platform pills */}
-            <div className="flex gap-1.5 p-1 rounded-pill bg-secondary/70">
+            {/* Platform toggle — morphing pill indicator slides between options */}
+            <div className="relative flex p-1 rounded-pill bg-secondary/70">
+              <span
+                aria-hidden
+                className="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-pill bg-card shadow-soft transition-transform duration-500 ease-spring"
+                style={{ transform: platform === "tiktok" ? "translateX(calc(100% + 0.5rem))" : "translateX(0)" }}
+              />
               {(["instagram", "tiktok"] as const).map((p) => (
                 <label
                   key={p}
                   className={[
-                    "cursor-pointer rounded-pill px-3.5 py-1.5 text-xs font-medium capitalize transition-colors",
-                    platform === p
-                      ? "bg-card text-foreground shadow-soft"
-                      : "text-muted-foreground hover:text-foreground",
+                    "relative z-10 cursor-pointer rounded-pill px-3.5 py-1.5 text-xs font-medium capitalize transition-colors",
+                    platform === p ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                   ].join(" ")}
                 >
                   <input type="radio" value={p} {...register("platform")} className="sr-only" />
