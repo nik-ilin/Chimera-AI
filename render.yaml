@@ -1,0 +1,38 @@
+# Render blueprint for the Chimera FastAPI AI microservice.
+# The Next.js frontend deploys to Vercel (Root Directory = frontend); see DEPLOYMENT.md.
+#
+# Deploy: Render → New → Blueprint → point at this repo. Set the secret env vars
+# (sync:false ones) in the Render dashboard.
+services:
+  - type: web
+    name: chimera-backend
+    runtime: python
+    rootDir: backend
+    plan: starter            # AI calls are slow; avoid the free plan's spin-down
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      # ── Secrets — set these in the Render dashboard ──
+      - key: CHIMERA_SERVICE_TOKEN      # must match the frontend value
+        sync: false
+      - key: ALLOWED_ORIGINS            # e.g. https://chimera.vercel.app
+        sync: false
+      - key: WATSONX_API_KEY
+        sync: false
+      - key: WATSONX_PROJECT_ID
+        sync: false
+      - key: WATSONX_URL                # region endpoint, e.g. https://us-south.ml.cloud.ibm.com
+        sync: false
+      - key: GRANITE_MODEL_ID
+        value: ibm/granite-8b-code-instruct
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
