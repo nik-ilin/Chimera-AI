@@ -46,7 +46,12 @@ class LyricSection(BaseModel):
 
 class WriteLyricsOutput(BaseModel):
     sections: list[LyricSection] = Field(min_length=1)
+    # Optional: a friendly note is non-essential and models (esp. code-tuned
+    # Granite variants) frequently omit it. The lyric `sections` are the real
+    # output, so a missing note must NOT fail the whole generation. The frontend
+    # already renders an empty note as nothing.
     assistant_message: str = Field(
+        default="",
         max_length=1000,
         description="A short assistant note about the generated lyrics.",
     )
