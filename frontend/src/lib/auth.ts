@@ -35,6 +35,11 @@ function requireEnv(name: string): string {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  // Trust the host header. Required for `next start` / self-hosted and behind
+  // proxies (Vercel, Railway, Render) — otherwise Auth.js v5 throws
+  // UntrustedHost. The AUTH_TRUST_HOST env var alone is not always honoured, so
+  // we set it explicitly here.
+  trustHost: true,
   adapter: SupabaseAdapter({
     url: requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     secret: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
