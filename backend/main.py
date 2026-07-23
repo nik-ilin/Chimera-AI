@@ -39,6 +39,24 @@ async def lifespan(app: FastAPI):
         logger.error("llm_init_failed", error=str(exc))
         raise
     logger.info("chimera_backend_startup", env=settings.app_env)
+
+    # Warm heavy lazy imports in the background so the first real request is
+    # fast, WITHOUT blocking startup. supabase-py's dependency tree is large and
+    # cold-importing it can take a long time on a slow disk (see
+    # services/supabase.py) — do it off the startup path.
+    import asyncio
+
+    async def _warmup() -> None:
+        try:
+            from services.supabase import get_supabase
+
+            await asyncio.to_thread(get_supabase)
+            logger.info("warmup_supabase_ready")
+        except Exception as exc:  # noqa: BLE001 — best-effort, never blocks
+            logger.warning("warmup_supabase_failed", error=str(exc))
+
+    asyncio.create_task(_warmup())
+
     yield
     logger.info("chimera_backend_shutdown")
 
