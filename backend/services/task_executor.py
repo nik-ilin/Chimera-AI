@@ -26,10 +26,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
 
 from models.creator_context import CreatorContext
+from models.opportunity import Opportunity, RankedOpportunity
 from services.llm import get_llm_service
 from services.output_schemas import (
     BuildImageBriefOutput,
     ClassifyCreatorOutput,
+    DraftOutreachOutput,
+    RankOpportunitiesOutput,
     WriteCaptionsOutput,
     WriteLyricsOutput,
 )
@@ -38,6 +41,8 @@ from services.prompts import (
     build_classify_prompt,
     build_image_brief_prompt,
     build_lyrics_prompt,
+    build_outreach_prompt,
+    build_rank_opportunities_prompt,
 )
 from services.task_params import TASK_PARAMS
 
@@ -138,6 +143,113 @@ class TaskExecutor:
             request_id=rid,
         )
         return BuildImageBriefOutput.model_validate(raw)
+
+    # ── rank_opportunities (Phase 4 / Block B2) ──────────────────────────────
+
+    async def rank_opportunities(
+        self,
+        ctx: CreatorContext,
+        opportunities: list[Opportunity],
+        career_level: str = "emerging",
+        request_id: str | None = None,
+    ) -> list[RankedOpportunity]:
+        """
+        Score each opportunity for fit and return them sorted best-first.
+
+        Failure policy: ranking is an ENHANCEMENT, not the feature. If the model
+        is unavailable or returns something unusable, the user should still get
+        their list of venues — just unscored — rather than an error page. So a
+        failure here degrades to score 0 with an explanatory reason instead of
+        propagating.
+        """
+        rid = request_id or str(uuid.uuid4())
+        if not opportunities:
+            return []
+
+        # Send only the fields the model needs to judge fit. Trimming keeps the
+        # prompt inside the context window when a city returns many venues.
+        payload = json.dumps(
+            [
+                {
+                    "source_id": o.source_id,
+                    "name": o.name,
+                    "kind": o.kind,
+                    "city": o.city,
+                    "country": o.country,
+                    "capacity": o.capacity,
+                    "genres": o.genres,
+                    "evidence": o.evidence,
+                    "upcoming_events": o.upcoming_events,
+                    "contact_hint": o.contact_hint,
+                }
+                for o in opportunities
+            ],
+            ensure_ascii=False,
+        )
+
+        prompt = build_rank_opportunities_prompt(ctx, payload, career_level)
+
+        try:
+            raw = await self._call_with_retry(
+                task_name="rank_concerts",
+                prompt=prompt,
+                schema_cls=RankOpportunitiesOutput,
+                request_id=rid,
+            )
+            parsed = RankOpportunitiesOutput.model_validate(raw)
+            by_id = {r.source_id: r for r in parsed.rankings}
+        except (ValueError, ValidationError) as exc:
+            logger.warning(
+                "rank_opportunities_failed_unranked_fallback",
+                extra={"request_id": rid, "error": str(exc)},
+            )
+            by_id = {}
+
+        ranked = [
+            RankedOpportunity(
+                **o.model_dump(),
+                fit_score=by_id[o.source_id].fit_score if o.source_id in by_id else 0,
+                fit_reason=(
+                    by_id[o.source_id].fit_reason
+                    if o.source_id in by_id
+                    else "Not scored — ranking was unavailable for this result."
+                ),
+                suggested_channel=(
+                    by_id[o.source_id].suggested_channel
+                    if o.source_id in by_id
+                    else o.contact_hint
+                ),
+            )
+            for o in opportunities
+        ]
+
+        ranked.sort(key=lambda o: o.fit_score, reverse=True)
+        return ranked
+
+    # ── draft_outreach (Phase 4 / Block B2) ──────────────────────────────────
+
+    async def draft_outreach(
+        self,
+        ctx: CreatorContext,
+        opportunity: Opportunity,
+        extra_notes: str = "",
+        request_id: str | None = None,
+    ) -> DraftOutreachOutput:
+        """
+        Draft a booking enquiry for the artist to review and send themselves.
+        Chimera never transmits this message — see services/opportunities.py.
+        """
+        rid = request_id or str(uuid.uuid4())
+        payload = json.dumps(opportunity.model_dump(), ensure_ascii=False)
+        prompt = build_outreach_prompt(ctx, payload, extra_notes)
+
+        raw = await self._call_with_retry(
+            task_name="draft_outreach_dm",
+            prompt=prompt,
+            schema_cls=DraftOutreachOutput,
+            request_id=rid,
+        )
+        return DraftOutreachOutput.model_validate(raw)
 
     # ── Concurrent captions (CONVENTIONS.md §4 — asyncio.gather) ─────────────
 

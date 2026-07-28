@@ -180,3 +180,114 @@ Output schema (respond with ONLY this JSON, no other text):
 {_IMAGE_BRIEF_SCHEMA}
 
 {_INPUT_BLOCK.format(user_input=user_brief[:2000])}"""
+
+
+# ─── Task: rank_concerts (opportunity fit) ────────────────────────────────────
+
+_RANK_SCHEMA = json.dumps({
+    "rankings": [
+        {
+            "source_id": "<echo the opportunity's source_id exactly>",
+            "fit_score": "<integer 0-100>",
+            "fit_reason": "<1-2 sentences citing the evidence, max 60 words>",
+            "suggested_channel": "<how to reach them, from contact_hint>",
+        }
+    ]
+})
+
+
+def build_rank_opportunities_prompt(
+    ctx: CreatorContext,
+    opportunities_json: str,
+    career_level: str,
+) -> str:
+    """
+    Score each opportunity's fit for this artist.
+
+    The opportunity list is data we fetched, not user text, so it sits in its own
+    <opportunities> block rather than <user_input>. The instruction to ground
+    every reason in the supplied evidence is what keeps fit_reason from becoming
+    confident fiction about venues the model has no real knowledge of.
+    """
+    return f"""{_SYSTEM_PREAMBLE}
+
+{_CONTEXT_BLOCK.format(context_json=_context_json(ctx))}
+
+ARTIST CAREER LEVEL: {career_level}
+
+TASK: You are advising this artist on where to seek bookings. Score EVERY
+opportunity below from 0-100 on how good a fit it is for THIS artist right now.
+
+Scoring guidance:
+- Genre overlap between the artist and what the venue programmes is the
+  strongest signal.
+- Match the room to the career level. A 2000-capacity room is a poor fit for an
+  artist with no following, however famous the venue; a 200-cap room is a poor
+  use of time for an established act.
+- Same city is a strong plus; same country is a mild plus.
+- Venues that visibly book emerging or unsigned acts score higher for newer
+  artists.
+
+HARD RULES:
+- Ground every fit_reason ONLY in the evidence, genres, capacity and city given
+  below. Do NOT invent facts about a venue, and do NOT rely on outside knowledge
+  of it. If the evidence is thin, say so and score lower.
+- Return one entry for EVERY opportunity, echoing source_id EXACTLY as given.
+
+Output schema (respond with ONLY this JSON, no other text):
+{_RANK_SCHEMA}
+
+<opportunities>
+{opportunities_json}
+</opportunities>"""
+
+
+# ─── Task: draft_outreach_dm ──────────────────────────────────────────────────
+
+_OUTREACH_SCHEMA = json.dumps({
+    "subject": "<short, specific subject line>",
+    "body": "<the message, 90-160 words, plain text with real line breaks>",
+    "channel": "<where to send it>",
+})
+
+
+def build_outreach_prompt(
+    ctx: CreatorContext,
+    opportunity_json: str,
+    extra_notes: str = "",
+) -> str:
+    """
+    Draft an outreach message the ARTIST sends themselves.
+
+    Chimera never sends this. The prompt says so explicitly, and asks for a
+    first-person draft the artist can edit, so the model doesn't produce
+    agent-speak ("I represent…") that would misrepresent who is writing.
+    """
+    return f"""{_SYSTEM_PREAMBLE}
+
+{_CONTEXT_BLOCK.format(context_json=_context_json(ctx))}
+
+TASK: Draft a booking enquiry that THE ARTIST will send themselves, in their own
+voice, first person. This is a draft for a human to review, edit and send — you
+are not sending anything.
+
+Requirements:
+- Professional, warm, and SHORT. Bookers read a hundred of these a week.
+- Open with a specific, genuine reason for contacting THIS venue, drawn from the
+  evidence provided. Never use a generic "I love your venue" opener.
+- State plainly who the artist is, their genre and city, and what they are
+  asking for (a support slot, a headline date, a showcase).
+- Include one concrete credibility detail ONLY if it appears in the creator
+  context. Do NOT invent streaming numbers, press quotes, or past shows.
+- End with a clear, low-friction ask and a placeholder line for links:
+  "[links: Spotify / press kit]".
+- No emoji. No hashtags. No hype adjectives.
+
+Output schema (respond with ONLY this JSON, no other text):
+{_OUTREACH_SCHEMA}
+
+<opportunity>
+{opportunity_json}
+</opportunity>
+
+{_INPUT_BLOCK.format(user_input=extra_notes[:500])}"""

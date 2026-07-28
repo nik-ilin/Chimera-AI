@@ -68,3 +68,40 @@ class BuildImageBriefOutput(BaseModel):
         default_factory=list,
         description="Individual style descriptors extracted from the brief.",
     )
+
+
+# ─── rank_concerts (opportunity fit ranking) ──────────────────────────────────
+
+class OpportunityRanking(BaseModel):
+    """One venue/promoter scored against the creator context."""
+
+    source_id: str = Field(
+        description="Echoes back the opportunity's source_id so we can rejoin."
+    )
+    fit_score: int = Field(ge=0, le=100)
+    fit_reason: str = Field(
+        max_length=400,
+        description="Why this is or isn't a fit — grounded in the given evidence.",
+    )
+    suggested_channel: str = Field(default="", max_length=120)
+
+
+class RankOpportunitiesOutput(BaseModel):
+    rankings: list[OpportunityRanking] = Field(default_factory=list)
+
+
+# ─── draft_outreach_dm ────────────────────────────────────────────────────────
+
+class DraftOutreachOutput(BaseModel):
+    """
+    A message the MUSICIAN sends themselves. Chimera never sends it for them —
+    see the note in services/opportunities.py.
+    """
+
+    subject: str = Field(max_length=200)
+    body: str = Field(max_length=2000)
+    channel: str = Field(
+        default="",
+        max_length=120,
+        description="Where to send it — e.g. 'Venue booking form'.",
+    )
