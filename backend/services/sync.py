@@ -39,7 +39,7 @@ from typing import Any
 
 import structlog
 
-from models.canonical import CanonicalEvent
+from models.canonical import CanonicalEvent, ExternalRef
 from services.connectors import get_connector
 from services.connectors.base import (
     ConnectorError,
@@ -65,6 +65,24 @@ _WINDOW_FUTURE_DAYS = 400
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _parse_ts(value: Any) -> datetime | None:
+    """
+    Parse a Postgres timestamptz into an aware datetime.
+
+    Returns None rather than raising: one malformed row must not abort a sync
+    over hundreds of events.
+    """
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    # Naive values would blow up on comparison with aware ones; assume UTC,
+    # which is what the column stores.
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 class SyncEngine:
@@ -445,6 +463,153 @@ class SyncEngine:
             lambda: db.table("external_refs").delete().eq("id", ref["id"]).execute()
         )
         return True
+
+    # ── Push: local → remote (Block 2) ──
+
+    async def push_pending(self, connection_id: str) -> dict[str, Any]:
+        """
+        Push locally-created and locally-edited events upstream.
+
+        What qualifies:
+          * an event with NO external_ref for this provider (created in
+            Chimera), or
+          * an event whose updated_at is newer than the ref's — i.e. edited here
+            since we last pushed it.
+
+        Events that ARRIVED from this same connection are skipped when unchanged,
+        otherwise every pull would immediately push its own results back and the
+        two systems would ping-pong forever.
+
+        Conflict policy is last-write-wins with a local bias, and that is a real
+        trade-off: if the same event changed on both sides since the last sync,
+        the Chimera edit wins and the remote change is overwritten. Proper
+        three-way merge needs a stored base revision per field; for a calendar
+        where one person edits both ends, local-wins is predictable and the
+        alternative (silently discarding the user's own edit) is worse.
+        """
+        db = get_supabase()
+        result = await asyncio.to_thread(
+            lambda: db.table("connections")
+            .select("*")
+            .eq("id", connection_id)
+            .maybe_single()
+            .execute()
+        )
+        connection = result.data if result and result.data else None
+        if not connection:
+            return {"ok": False, "error": "connection_not_found"}
+
+        connector = get_connector(connection["provider"])
+        if not connector.capabilities.push:
+            return {"ok": True, "pushed": 0, "skipped": 0, "note": "read-only connector"}
+
+        ctx = await self._context_for(connection)
+        user_id = connection["user_id"]
+
+        events_result = await asyncio.to_thread(
+            lambda: db.table("events")
+            .select("*")
+            .eq("user_id", user_id)
+            .gte("starts_at", (_now() - timedelta(days=30)).isoformat())
+            .execute()
+        )
+        events = events_result.data or []
+
+        refs_result = await asyncio.to_thread(
+            lambda: db.table("external_refs")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("provider", connection["provider"])
+            .eq("entity_type", "event")
+            .execute()
+        )
+        refs_by_entity = {r["entity_id"]: r for r in (refs_result.data or [])}
+
+        pushed = 0
+        skipped = 0
+        failures = 0
+
+        for row in events:
+            ref = refs_by_entity.get(row["id"])
+
+            if ref is not None:
+                local_updated = _parse_ts(row.get("updated_at"))
+                ref_updated = _parse_ts(ref.get("updated_at"))
+                # Unchanged since we last pushed → nothing to do. This is the
+                # check that stops the ping-pong.
+                if local_updated and ref_updated and local_updated <= ref_updated:
+                    skipped += 1
+                    continue
+
+            starts_at = _parse_ts(row.get("starts_at"))
+            if starts_at is None:
+                skipped += 1
+                continue
+
+            event = CanonicalEvent(
+                id=row["id"],
+                title=row.get("title") or "(untitled)",
+                event_type=row.get("event_type") or "other",
+                starts_at=starts_at,
+                ends_at=_parse_ts(row.get("ends_at")),
+                all_day=bool(row.get("all_day")),
+                location=row.get("location") or "",
+                notes=row.get("notes") or "",
+                external=(
+                    ExternalRef(
+                        provider=connection["provider"],
+                        external_id=ref["external_id"],
+                        etag=ref.get("etag", "") or "",
+                    )
+                    if ref
+                    else None
+                ),
+            )
+
+            try:
+                outcome = await connector.push(ctx, event)
+            except NeedsReauth as exc:
+                await self._update_connection(
+                    connection_id, {"status": "expired", "last_error": str(exc)}
+                )
+                return {"ok": False, "error": "needs_reauth", "pushed": pushed}
+            except ConnectorError as exc:
+                # One bad event must not abort the whole push.
+                logger.warning("push_event_failed", event_id=row["id"], error=str(exc))
+                failures += 1
+                continue
+
+            if outcome.external_id:
+                await self._write_ref(
+                    user_id=user_id,
+                    connection_id=connection_id,
+                    provider=connection["provider"],
+                    entity_type="event",
+                    entity_id=row["id"],
+                    external_id=outcome.external_id,
+                    etag=outcome.etag,
+                    remote_updated_at=_now(),
+                )
+                pushed += 1
+
+        logger.info(
+            "push_complete", connection_id=connection_id, pushed=pushed, skipped=skipped
+        )
+        return {"ok": True, "pushed": pushed, "skipped": skipped, "failed": failures}
+
+    async def sync_two_way(self, connection_id: str) -> dict[str, Any]:
+        """
+        Pull, then push.
+
+        Pull first so that remote deletions and edits land before we decide what
+        is locally newer — pushing first would resurrect events the user deleted
+        on their phone.
+        """
+        pull_result = await self.sync_connection(connection_id)
+        if not pull_result.get("ok"):
+            return pull_result
+        push_result = await self.push_pending(connection_id)
+        return {**pull_result, "push": push_result}
 
     # ── Run bookkeeping ──
 

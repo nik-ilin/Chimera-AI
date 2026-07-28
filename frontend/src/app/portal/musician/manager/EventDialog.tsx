@@ -17,7 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, Trash2, X } from "lucide-react";
 
-import { EVENT_TYPES, EVENT_TYPE_META } from "@/lib/events-schema";
+import { EVENT_TYPES, EVENT_TYPE_META, REMINDER_OPTIONS } from "@/lib/events-schema";
 import { toLocalInput, toDateInput, fromLocalInput } from "@/lib/calendar";
 import type { EventRow } from "@/types/supabase";
 
@@ -32,6 +32,8 @@ const DialogSchema = z
     ends_at: z.string(),
     location: z.string().trim().max(300),
     notes: z.string().trim().max(2000),
+    // "" = no reminder. Kept as a string because a <select> value always is.
+    reminder: z.string(),
   })
   .refine(
     (v) => !v.ends_at || Date.parse(v.ends_at) >= Date.parse(v.starts_at),
@@ -91,6 +93,10 @@ export default function EventDialog({
         : "",
       location: event?.location ?? "",
       notes: event?.notes ?? "",
+      reminder:
+        event?.reminder_minutes === null || event?.reminder_minutes === undefined
+          ? ""
+          : String(event.reminder_minutes),
     },
   });
 
@@ -165,6 +171,9 @@ export default function EventDialog({
       ends_at: values.ends_at ? fromLocalInput(values.ends_at) : null,
       location: values.location,
       notes: values.notes,
+      // "" means "no reminder" → null, which the CHECK constraint allows and 0
+      // does not conflate with ("at start time" is a real, different choice).
+      reminder_minutes: values.reminder === "" ? null : Number(values.reminder),
     };
 
     const url = isEdit ? `/api/events/${event.id}` : "/api/events";
@@ -385,6 +394,24 @@ export default function EventDialog({
               className={inputClass}
               {...register("location")}
             />
+          </div>
+
+          {/* Reminder */}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="event-reminder" className="u-label text-muted-foreground">
+              Reminder
+            </label>
+            <select id="event-reminder" className={inputClass} {...register("reminder")}>
+              {REMINDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[0.625rem] text-muted-foreground/70 leading-relaxed">
+              Delivered by your own calendar app — reminders are written into the
+              .ics export and pushed to connected calendars.
+            </p>
           </div>
 
           {/* Notes */}
