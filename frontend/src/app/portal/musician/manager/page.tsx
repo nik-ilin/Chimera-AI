@@ -1,25 +1,32 @@
 /**
  * Personal Manager — Server Component shell.
  *
- * Auth guard, then a server-side fetch of the CURRENT month's events so the
- * calendar paints with real data on first render instead of flashing an empty
- * grid. Subsequent months are fetched by the client as the user navigates.
+ * Loads two windows server-side so the first paint is real data rather than a
+ * spinner:
+ *   * a broad timeline window (recent past → next year) for the timeline, the
+ *     map and the command palette;
+ *   * the current month for the calendar view.
  *
- * The Supabase query runs as the authenticated user (anon key + minted JWT), so
- * the owner-only RLS policies from migration 006 apply here exactly as they do
- * in the Route Handlers.
+ * Both reads run as the authenticated user, so the owner-only RLS policies from
+ * migrations 006/007 are what actually enforce isolation.
  */
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Music2, Compass } from "lucide-react";
+import { ArrowLeft, Compass, Music2 } from "lucide-react";
 
 import { auth } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { loadTimeline } from "@/lib/manager-data";
 import { startOfMonth, startOfNextMonth } from "@/lib/calendar";
 import type { EventRow } from "@/types/supabase";
-import CalendarClient from "./CalendarClient";
+import type { TimelineItem } from "@/components/manager/Timeline";
+import ManagerShell from "./ManagerShell";
+
+/** Recent past stays visible so unsettled shows can still be chased. */
+const TIMELINE_PAST_DAYS = 45;
+const TIMELINE_FUTURE_DAYS = 365;
 
 async function loadCurrentMonth(userId: string): Promise<EventRow[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,26 +41,36 @@ async function loadCurrentMonth(userId: string): Promise<EventRow[]> {
     .lt("starts_at", startOfNextMonth(now).toISOString())
     .order("starts_at", { ascending: true });
 
-  // A read failure here must not blank the whole page — the client refetches on
-  // the first month change and surfaces its own error state.
   if (error) {
-    console.error("[manager] initial events load failed:", error.message);
+    console.error("[manager] initial month load failed:", error.message);
     return [];
   }
   return (data ?? []) as EventRow[];
 }
 
-export default async function ManagerPage() {
+export default async function ManagerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) {
     redirect("/auth/signin?callbackUrl=/portal/musician/manager");
   }
 
-  const events = await loadCurrentMonth(session.user.id);
+  const { new: openNew } = await searchParams;
+
+  const now = Date.now();
+  const from = new Date(now - TIMELINE_PAST_DAYS * 86_400_000).toISOString();
+  const to = new Date(now + TIMELINE_FUTURE_DAYS * 86_400_000).toISOString();
+
+  const [timeline, monthEvents] = await Promise.all([
+    loadTimeline(session.user.id, { from, to, limit: 300 }),
+    loadCurrentMonth(session.user.id),
+  ]);
 
   return (
     <main className="min-h-screen bg-background">
-      {/* ── Top bar ── */}
       <header className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
@@ -78,23 +95,23 @@ export default async function ManagerPage() {
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-pill border border-border px-3.5 py-1.5 hover:bg-card"
         >
           <Compass className="w-3.5 h-3.5" />
-          Opportunities
+          <span className="hidden sm:inline">Opportunities</span>
         </Link>
       </header>
 
       <div className="max-w-6xl mx-auto px-6 pb-16 pt-4">
-        {/* Intro */}
-        <div className="mb-8 animate-fade-up">
+        <div className="mb-7 animate-fade-up">
           <div className="u-label text-muted-foreground mb-3">Personal manager</div>
           <h1 className="font-display text-4xl sm:text-5xl font-semibold tracking-tight text-foreground">
-            Your <span className="text-chimera-clay">calendar.</span>
+            Everything, <span className="text-chimera-clay">in one place.</span>
           </h1>
-          <p className="text-muted-foreground text-sm mt-3 max-w-md leading-relaxed">
-            Gigs, releases, rehearsals and deadlines in one place.
-          </p>
         </div>
 
-        <CalendarClient initialEvents={events} />
+        <ManagerShell
+          initialTimeline={timeline as unknown as TimelineItem[]}
+          initialMonthEvents={monthEvents}
+          openNew={openNew === "1"}
+        />
       </div>
     </main>
   );
