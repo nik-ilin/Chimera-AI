@@ -47,7 +47,9 @@ class Settings(BaseSettings):
     # ── Google Calendar ──
     google_client_id: str = ""
     google_client_secret: str = ""
-    google_redirect_uri: str = "http://localhost:8000/api/calendar/oauth/callback"
+    # Must match the callback in routes/connections.py AND the URI registered in
+    # Google Cloud Console — Google rejects the exchange on any mismatch.
+    google_redirect_uri: str = "http://localhost:8000/api/connections/oauth/callback"
     oauth_token_encryption_key: str = ""
 
     # ── Ticketmaster ──
