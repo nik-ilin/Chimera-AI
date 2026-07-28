@@ -338,7 +338,28 @@ async def sync_now(request: Request, connection_id: str, body: SyncRequest) -> d
     if not (owned and owned.data):
         raise HTTPException(status_code=404, detail="Connection not found.")
 
-    return await get_sync_engine().sync_connection(connection_id)
+    # Two-way: pull first, then push local changes. Pull-before-push matters —
+    # pushing first would resurrect events deleted on the user's phone.
+    return await get_sync_engine().sync_two_way(connection_id)
+
+
+@router.post("/connections/{connection_id}/push")
+@limiter.limit("30/minute")
+async def push_now(request: Request, connection_id: str, body: SyncRequest) -> dict[str, Any]:
+    """Push local events upstream without pulling first."""
+    db = get_supabase()
+    owned = await asyncio.to_thread(
+        lambda: db.table("connections")
+        .select("id")
+        .eq("id", connection_id)
+        .eq("user_id", body.user_id)
+        .maybe_single()
+        .execute()
+    )
+    if not (owned and owned.data):
+        raise HTTPException(status_code=404, detail="Connection not found.")
+
+    return await get_sync_engine().push_pending(connection_id)
 
 
 @router.delete("/connections/{connection_id}")

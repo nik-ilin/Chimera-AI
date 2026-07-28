@@ -60,7 +60,23 @@ const eventFields = {
   all_day: z.boolean(),
   location: z.string().trim().max(300),
   notes: z.string().trim().max(2000),
+  /**
+   * Minutes before the start. null = no reminder; 0 is distinct and means "at
+   * start time". Capped at 4 weeks to match the CHECK in migration 008.
+   */
+  reminder_minutes: z.number().int().min(0).max(40320).nullable(),
 };
+
+/** Offsets offered in the UI. Values are minutes. */
+export const REMINDER_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "No reminder" },
+  { value: "0", label: "At start time" },
+  { value: "30", label: "30 minutes before" },
+  { value: "60", label: "1 hour before" },
+  { value: "180", label: "3 hours before" },
+  { value: "1440", label: "1 day before" },
+  { value: "10080", label: "1 week before" },
+];
 
 /**
  * Rejects an end before the start. Mirrors the events_end_after_start CHECK in
@@ -88,6 +104,7 @@ export const CreateEventSchema = z
     all_day: eventFields.all_day.default(false),
     location: eventFields.location.default(""),
     notes: eventFields.notes.default(""),
+    reminder_minutes: eventFields.reminder_minutes.default(null),
   })
   .superRefine(endAfterStart);
 
@@ -138,6 +155,7 @@ export const UpdateEventSchema = z
     all_day: eventFields.all_day.optional(),
     location: eventFields.location.optional(),
     notes: eventFields.notes.optional(),
+    reminder_minutes: eventFields.reminder_minutes.optional(),
     venue_id: gigFields.venue_id.optional(),
     promoter_id: gigFields.promoter_id.optional(),
     fee_cents: gigFields.fee_cents.optional(),

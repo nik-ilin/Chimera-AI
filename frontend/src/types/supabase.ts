@@ -88,6 +88,8 @@ export interface Database {
           rider: string;
           tour_id: string | null;
           source_connection_id: string | null;
+          /** Minutes before starts_at. NULL = no reminder (migration 008). */
+          reminder_minutes: number | null;
         };
         Insert: {
           id?: string;
@@ -110,6 +112,7 @@ export interface Database {
           rider?: string;
           tour_id?: string | null;
           source_connection_id?: string | null;
+          reminder_minutes?: number | null;
         };
         Update: {
           title?: string;
@@ -128,6 +131,7 @@ export interface Database {
           setlist?: string;
           rider?: string;
           tour_id?: string | null;
+          reminder_minutes?: number | null;
         };
       };
       /** Migration 006 — opportunities bookmarked from the finder (Block B2). */

@@ -289,6 +289,31 @@ def build_calendar(events: list[dict[str, Any]], *, cal_name: str = "Chimera") -
             lines.append(_fold(f"LOCATION:{_escape(event['location'])}"))
         if event.get("description"):
             lines.append(_fold(f"DESCRIPTION:{_escape(event['description'])}"))
+
+        # VALARM — this is how a Chimera reminder actually fires. We have no
+        # push infrastructure, so the reminder rides along with the event and
+        # the user's own calendar app raises it. It therefore keeps working
+        # when Chimera is closed.
+        #
+        # TRIGGER is a NEGATIVE duration relative to DTSTART: -PT30M means
+        # "30 minutes before". A positive value would fire AFTER the show.
+        reminder = event.get("reminder_minutes")
+        if reminder is not None and int(reminder) >= 0:
+            minutes = int(reminder)
+            if minutes == 0:
+                trigger = "PT0M"
+            elif minutes % 1440 == 0:
+                trigger = f"-P{minutes // 1440}D"
+            elif minutes % 60 == 0:
+                trigger = f"-PT{minutes // 60}H"
+            else:
+                trigger = f"-PT{minutes}M"
+            lines.append("BEGIN:VALARM")
+            lines.append("ACTION:DISPLAY")
+            lines.append(f"TRIGGER:{trigger}")
+            lines.append(_fold(f"DESCRIPTION:{_escape(event.get('summary', 'Reminder'))}"))
+            lines.append("END:VALARM")
+
         lines.append("END:VEVENT")
 
     lines.append("END:VCALENDAR")

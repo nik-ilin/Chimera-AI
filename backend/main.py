@@ -92,6 +92,7 @@ from routes.visual_brief import router as visual_brief_router
 from routes.opportunities import router as opportunities_router
 from routes.connections import router as connections_router
 from routes.connections import public_router as connections_public_router
+from routes.calendar import router as calendar_router
 
 app.include_router(health_router, prefix="/api")
 app.include_router(classify_router, prefix="/api")
@@ -100,6 +101,7 @@ app.include_router(ghostwrite_router, prefix="/api")
 app.include_router(visual_brief_router, prefix="/api")
 app.include_router(opportunities_router, prefix="/api")
 app.include_router(connections_router, prefix="/api")
+app.include_router(calendar_router, prefix="/api")
 # Browser-facing OAuth callback — deliberately NOT service-token guarded, since
 # it is reached by a Google redirect. Authenticity comes from the signed state.
 app.include_router(connections_public_router, prefix="/api")

@@ -15,11 +15,13 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Download,
   List,
   MapPin,
   Plus,
   Loader2,
   CalendarPlus,
+  TriangleAlert,
 } from "lucide-react";
 
 import {
@@ -38,6 +40,7 @@ import {
   WEEKDAY_LABELS,
 } from "@/lib/calendar";
 import { EVENT_TYPE_META } from "@/lib/events-schema";
+import { conflictsByEvent, detectConflicts } from "@/lib/conflicts";
 import type { EventRow } from "@/types/supabase";
 import EventDialog from "./EventDialog";
 
@@ -57,6 +60,10 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Event
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>({ open: false });
   const [focusedDay, setFocusedDay] = useState<string>(() => dateKey(new Date()));
+  /** Event currently being dragged, and the day cell under the pointer. */
+  const [dragging, setDragging] = useState<EventRow | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const gridRef = useRef<HTMLDivElement>(null);
   // Guards against a slow response for month A landing after month B was
@@ -196,6 +203,100 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Event
     setDialog({ open: false });
   }
 
+  // ── Drag-and-drop rescheduling ──
+
+  /**
+   * Move an event to `targetDay`, preserving its time of day and duration.
+   *
+   * Dropping a 21:00 show on another date must keep it at 21:00 — snapping to
+   * midnight would silently destroy the load-in time. Duration is preserved by
+   * shifting `ends_at` by the same delta rather than recomputing it.
+   *
+   * Optimistic: the chip moves immediately and rolls back if the PATCH fails,
+   * because a drag that visibly lags feels broken even when it succeeds.
+   */
+  async function moveEvent(event: EventRow, targetDay: Date) {
+    const original = new Date(event.starts_at);
+    const moved = new Date(
+      targetDay.getFullYear(),
+      targetDay.getMonth(),
+      targetDay.getDate(),
+      original.getHours(),
+      original.getMinutes(),
+      0,
+      0
+    );
+
+    // No-op drop — don't burn a request.
+    if (moved.getTime() === original.getTime()) return;
+
+    const deltaMs = moved.getTime() - original.getTime();
+    const newEnds = event.ends_at
+      ? new Date(Date.parse(event.ends_at) + deltaMs).toISOString()
+      : null;
+
+    const previous = events;
+    const optimistic: EventRow = {
+      ...event,
+      starts_at: moved.toISOString(),
+      ends_at: newEnds,
+    };
+    setEvents((prev) => prev.map((e) => (e.id === event.id ? optimistic : e)));
+
+    try {
+      const response = await fetch(`/api/events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          starts_at: optimistic.starts_at,
+          ends_at: optimistic.ends_at,
+        }),
+      });
+      if (!response.ok) {
+        setEvents(previous);
+        setToast("Could not reschedule that event.");
+        return;
+      }
+      const saved = (await response.json()) as EventRow;
+      setEvents((prev) => prev.map((e) => (e.id === saved.id ? saved : e)));
+      setToast(
+        `Moved “${saved.title}” to ${moved.toLocaleDateString(undefined, {
+          day: "numeric",
+          month: "short",
+        })}`
+      );
+    } catch {
+      setEvents(previous);
+      setToast("Could not reach the server.");
+    }
+  }
+
+  // Auto-dismiss the toast so it never becomes permanent furniture.
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // ── Conflicts ──
+  // Recomputed from local state, so a drag-and-drop reschedule flags a new
+  // clash instantly rather than after a refetch.
+  const conflicts = useMemo(
+    () =>
+      detectConflicts(
+        events.map((e) => ({
+          id: e.id,
+          title: e.title,
+          starts_at: e.starts_at,
+          ends_at: e.ends_at,
+          all_day: e.all_day,
+          event_type: e.event_type,
+        }))
+      ),
+    [events]
+  );
+  const conflictIndex = useMemo(() => conflictsByEvent(conflicts), [conflicts]);
+
   // ── Roving focus inside the month grid ──
   function onGridKeyDown(e: React.KeyboardEvent) {
     const deltas: Record<string, number> = {
@@ -313,6 +414,19 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Event
           ))}
         </div>
 
+        {/* Plain link, not fetch+blob: the browser handles the download and
+            the Content-Disposition from the route, and it still works with JS
+            disabled. */}
+        <a
+          href="/api/calendar/export"
+          download="chimera-calendar.ics"
+          className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3.5 py-2 text-xs text-muted-foreground hover:bg-card hover:text-foreground transition-colors"
+          title="Download as .ics — includes reminders"
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Export</span>
+        </a>
+
         <button
           type="button"
           onClick={() => openCreate(new Date())}
@@ -322,6 +436,47 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Event
           New event
         </button>
       </div>
+
+      {/* ── Conflicts ── */}
+      {conflicts.length > 0 && (
+        <div className="mb-5 rounded-widget border border-chimera-gold/30 bg-chimera-gold/10 px-5 py-4 animate-scale-in">
+          <div className="u-label text-chimera-gold mb-2 flex items-center gap-1.5">
+            <TriangleAlert className="w-3 h-3" />
+            {conflicts.length} scheduling {conflicts.length === 1 ? "conflict" : "conflicts"}
+          </div>
+          <ul className="flex flex-col gap-1">
+            {conflicts.slice(0, 4).map((conflict, i) => (
+              <li
+                key={`${conflict.eventIds[0]}-${conflict.eventIds[1]}-${i}`}
+                className="flex items-start gap-2 text-xs text-muted-foreground"
+              >
+                <span
+                  className={[
+                    "mt-1 w-1.5 h-1.5 rounded-full shrink-0",
+                    conflict.severity === "error" ? "bg-destructive" : "bg-chimera-gold",
+                  ].join(" ")}
+                />
+                <span className="leading-relaxed">{conflict.message}</span>
+              </li>
+            ))}
+            {conflicts.length > 4 && (
+              <li className="text-xs text-muted-foreground/70">
+                and {conflicts.length - 4} more
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      {/* ── Reschedule toast ── */}
+      {toast && (
+        <div
+          role="status"
+          className="mb-5 rounded-widget border border-border bg-card px-5 py-3 text-sm text-foreground animate-scale-in"
+        >
+          {toast}
+        </div>
+      )}
 
       {loadError && (
         <div
@@ -383,6 +538,22 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Event
                       openCreate(day);
                     }
                   }}
+                  // preventDefault on dragOver is what marks a element as a
+                  // valid drop target — without it the browser refuses the drop.
+                  onDragOver={(e) => {
+                    if (!dragging) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dropTarget !== key) setDropTarget(key);
+                  }}
+                  onDragLeave={() => setDropTarget((t) => (t === key ? null : t))}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const event = dragging;
+                    setDropTarget(null);
+                    setDragging(null);
+                    if (event) void moveEvent(event, day);
+                  }}
                   className={[
                     "group relative min-h-[4.5rem] sm:min-h-[6.5rem] rounded-2xl p-1.5 sm:p-2 cursor-pointer",
                     "border transition-all duration-300 ease-smooth",
@@ -391,6 +562,9 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Event
                       ? "border-transparent bg-transparent opacity-40"
                       : "border-border/60 bg-background/40 hover:bg-secondary/50 hover:border-border",
                     today ? "ring-1 ring-chimera-clay/40 bg-chimera-clay-muted/25" : "",
+                    dropTarget === key
+                      ? "ring-2 ring-chimera-clay bg-chimera-clay-muted/60 scale-[1.02]"
+                      : "",
                   ].join(" ")}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -411,16 +585,44 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Event
                     {/* Cap at 3 so a busy day can't blow out the row height. */}
                     {dayEvents.slice(0, 3).map((event) => {
                       const meta = EVENT_TYPE_META[event.event_type];
+                      const eventConflicts = conflictIndex.get(event.id) ?? [];
+                      const worst = eventConflicts.some((c) => c.severity === "error")
+                        ? "error"
+                        : eventConflicts.length > 0
+                          ? "warning"
+                          : null;
                       return (
                         <button
                           key={event.id}
                           type="button"
+                          draggable
+                          onDragStart={(e) => {
+                            setDragging(event);
+                            e.dataTransfer.effectAllowed = "move";
+                            // Firefox refuses to start a drag unless some data
+                            // is set on the transfer.
+                            e.dataTransfer.setData("text/plain", event.id);
+                          }}
+                          onDragEnd={() => {
+                            setDragging(null);
+                            setDropTarget(null);
+                          }}
                           onClick={(e) => {
                             e.stopPropagation(); // don't also open "create"
                             openEdit(event);
                           }}
-                          title={event.title}
-                          className="flex items-center gap-1 rounded-md px-1 py-0.5 text-left hover:bg-card transition-colors"
+                          title={
+                            eventConflicts.length > 0
+                              ? eventConflicts.map((c) => c.message).join(" · ")
+                              : event.title
+                          }
+                          className={[
+                            "flex items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors",
+                            "cursor-grab active:cursor-grabbing hover:bg-card",
+                            dragging?.id === event.id ? "opacity-40" : "",
+                            worst === "error" ? "bg-destructive/10" : "",
+                            worst === "warning" ? "bg-chimera-gold/10" : "",
+                          ].join(" ")}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot}`}
@@ -434,6 +636,15 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Event
                             )}
                             {event.title}
                           </span>
+                          {worst && (
+                            <TriangleAlert
+                              className={[
+                                "w-2.5 h-2.5 shrink-0 ml-auto",
+                                worst === "error" ? "text-destructive" : "text-chimera-gold",
+                              ].join(" ")}
+                              aria-label="Scheduling conflict"
+                            />
+                          )}
                         </button>
                       );
                     })}
@@ -456,7 +667,8 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Event
           </div>
 
           <p className="u-label text-muted-foreground/50 mt-4 text-center normal-case tracking-normal">
-            ← → month · T today · N new event · click a day to add
+            ← → month · T today · N new event · click a day to add · drag an
+            event to reschedule
           </p>
         </div>
       )}
