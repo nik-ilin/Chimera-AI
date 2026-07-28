@@ -39,10 +39,10 @@ const modules = [
     thumb: "module-manager",
     title: "Personal Manager",
     description:
-      "Calendar, Instagram outreach to promoters, and concert-opportunity finder.",
+      "Event calendar for gigs, releases and deadlines — plus a booking-opportunity finder.",
     icon: Calendar,
     href: "/portal/musician/manager",
-    available: false, // Phase 4
+    available: true, // Phase 4 ✓
   },
   {
     id: "visual",
