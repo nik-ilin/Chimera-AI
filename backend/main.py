@@ -59,8 +59,6 @@ async def lifespan(app: FastAPI):
     # fast, WITHOUT blocking startup. supabase-py's dependency tree is large and
     # cold-importing it can take a long time on a slow disk (see
     # services/supabase.py) — do it off the startup path.
-    import asyncio
-
     async def _warmup() -> None:
         try:
             from services.supabase import get_supabase
