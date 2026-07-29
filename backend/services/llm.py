@@ -28,7 +28,7 @@ from typing import Any
 from langchain_core.messages import BaseMessage
 
 from config import settings
-from services.task_params import TaskParams
+from services.task_params import TASK_PARAMS, TaskParams
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,13 @@ class LLMService(ABC):
         The caller accumulates the full text and parses/validates it at the end.
         """
         ...
+
+    async def prewarm(self) -> None:
+        """
+        Pre-build any expensive per-provider client state so the first real
+        request doesn't pay for it. Called once at startup. Default: no-op.
+        """
+        return None
 
     @property
     @abstractmethod
@@ -132,6 +139,32 @@ class GraniteLLMService(LLMService):
                 client = await asyncio.to_thread(self._build_client, params)
                 self._clients[key] = client
             return client
+
+    async def prewarm(self) -> None:
+        """
+        Build a client for every distinct task param set at startup.
+
+        The client cache is keyed by (temperature, max_tokens), so a client warmed
+        by one task cannot serve another — classify's (0.2, 256) client does NOT
+        cover captions (0.8, 512) or lyrics (0.8, 2048). Without this, the first
+        request for each param set pays the build cost on its critical path; the
+        very first build in the process also pays the IAM handshake (~3s measured),
+        which dominated time-to-first-token.
+        """
+        for params in dict.fromkeys(TASK_PARAMS.values()):
+            try:
+                await self._get_client(params)
+            except Exception as exc:  # noqa: BLE001 — warming is best-effort
+                # Never block startup on a warm failure: the request path builds
+                # (and reports) lazily exactly as before.
+                logger.warning(
+                    "llm_prewarm_failed",
+                    extra={
+                        "temperature": params.temperature,
+                        "max_tokens": params.max_tokens,
+                        "error": str(exc),
+                    },
+                )
 
     async def generate(
         self,

@@ -6,6 +6,8 @@ Security enforced here (CONVENTIONS.md §1, §3):
 - CORS locked to ALLOWED_ORIGINS only.
 - Rate limiting via slowapi.
 """
+import asyncio
+import time
 from contextlib import asynccontextmanager
 
 import structlog
@@ -38,6 +40,19 @@ async def lifespan(app: FastAPI):
     except RuntimeError as exc:
         logger.error("llm_init_failed", error=str(exc))
         raise
+
+    # Warm the per-task LLM clients in the background. Building a ChatWatsonx
+    # client costs an IAM handshake (~3s for the first one in the process), and
+    # the client cache is keyed by task params — so without this the first
+    # captions/ghostwrite request pays that cost in its time-to-first-token.
+    # Kept off the startup path so the server accepts traffic immediately.
+    async def _prewarm() -> None:
+        t0 = time.perf_counter()
+        await svc.prewarm()
+        logger.info("llm_prewarm_done", seconds=round(time.perf_counter() - t0, 2))
+
+    warm_task = asyncio.create_task(_prewarm())
+
     logger.info("chimera_backend_startup", env=settings.app_env)
 
     # Warm heavy lazy imports in the background so the first real request is
@@ -58,6 +73,8 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_warmup())
 
     yield
+    if not warm_task.done():
+        warm_task.cancel()
     logger.info("chimera_backend_shutdown")
 
 
