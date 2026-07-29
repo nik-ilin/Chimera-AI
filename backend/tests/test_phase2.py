@@ -56,8 +56,21 @@ async def run() -> None:
 
     # ── LLM abstraction ─────────────────────────────────────────────────────────
     print("\n[llm abstraction]")
+    from config import settings as cfg
     svc = get_llm_service()
-    check("FakeLLMService active (no watsonx creds)", svc.provider_name == "fake/stub", svc.provider_name)
+    has_creds = bool(cfg.watsonx_api_key and cfg.watsonx_project_id)
+    if has_creds:
+        check(
+            "GraniteLLMService active (watsonx creds present)",
+            svc.provider_name.startswith("granite/"),
+            svc.provider_name,
+        )
+    else:
+        check(
+            "FakeLLMService active (no watsonx creds)",
+            svc.provider_name == "fake/stub",
+            svc.provider_name,
+        )
     check("singleton — same instance returned twice", svc is get_llm_service())
 
     # ── Task params ─────────────────────────────────────────────────────────────

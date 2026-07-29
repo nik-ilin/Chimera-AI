@@ -53,7 +53,13 @@ class WriteLyricsOutput(BaseModel):
     assistant_message: str = Field(
         default="",
         max_length=1000,
-        description="A short assistant note about the generated lyrics.",
+        description=(
+            "A short assistant note about the generated lyrics. Optional: the "
+            "prompt asks for it, but code-tuned models (e.g. granite-8b-code-"
+            "instruct) routinely omit it. Requiring it made an otherwise-valid "
+            "streamed generation fail validation and pay a full non-streamed "
+            "repair retry, so it defaults to empty instead."
+        ),
     )
 
 

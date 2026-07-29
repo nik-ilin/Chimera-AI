@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     watsonx_api_key: str = ""
     watsonx_project_id: str = ""
     watsonx_url: str = "https://us-south.ml.cloud.ibm.com"
-    granite_model_id: str = "ibm/granite-3-8b-instruct"
+    granite_model_id: str = "meta-llama/llama-3-3-70b-instruct"
 
     # ── LangFlow ──
     langflow_base_url: str = "http://localhost:7860"

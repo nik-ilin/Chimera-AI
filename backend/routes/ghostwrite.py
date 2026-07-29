@@ -74,7 +74,17 @@ async def ghostwrite(request: Request, body: GhostwriteRequest):
     logger.info("ghostwrite_request", request_id=rid, session_id=body.session_id)
     supabase = get_supabase()
 
+    def _log_insert_failure(task: asyncio.Task) -> None:
+        """Always retrieve the background insert's exception so it can't be lost."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("ghostwrite_session_insert_failed", request_id=rid, error=str(exc))
+
     async def event_stream():
+        # Set when a NEW session row is being inserted in the background.
+        insert_task: asyncio.Task | None = None
         try:
             # ── Load or create the session (DB calls offloaded off the loop) ──
             if body.session_id:
@@ -96,22 +106,30 @@ async def ghostwrite(request: Request, body: GhostwriteRequest):
                 session_id = str(uuid.uuid4())
                 turn_history = []
                 history_summary = ""
-                await asyncio.to_thread(
-                    lambda: supabase.table("lyric_sessions")
-                    .insert(
-                        {
-                            "id": session_id,
-                            # Real authenticated user id — satisfies the FK to
-                            # next_auth.users and the owner-only RLS policy.
-                            "user_id": body.user_id,
-                            "title": (body.theme or "Untitled Session")[:200],
-                            "genre": body.genre,
-                            "theme": body.theme,
-                            "rhyme_scheme": body.rhyme_scheme,
-                        }
+                # A new session has no history, so the prompt does not depend on
+                # this write — run it in the background instead of blocking, so
+                # DB latency never delays the first token. We generate the id
+                # client-side, so the session event can be sent immediately.
+                # It is awaited before the post-generation UPDATE below.
+                insert_task = asyncio.create_task(
+                    asyncio.to_thread(
+                        lambda: supabase.table("lyric_sessions")
+                        .insert(
+                            {
+                                "id": session_id,
+                                # Real authenticated user id — satisfies the FK to
+                                # next_auth.users and the owner-only RLS policy.
+                                "user_id": body.user_id,
+                                "title": (body.theme or "Untitled Session")[:200],
+                                "genre": body.genre,
+                                "theme": body.theme,
+                                "rhyme_scheme": body.rhyme_scheme,
+                            }
+                        )
+                        .execute()
                     )
-                    .execute()
                 )
+                insert_task.add_done_callback(_log_insert_failure)
 
             yield _sse({"type": "session", "session_id": session_id})
 
@@ -156,6 +174,10 @@ async def ghostwrite(request: Request, body: GhostwriteRequest):
 
             # ── Persist the new turns ─────────────────────────────────────────
             if result_dict is not None:
+                # The row must exist before we UPDATE it. Streaming has already
+                # finished by now, so this await costs the client nothing.
+                if insert_task is not None:
+                    await insert_task
                 assistant_message = result_dict.get("assistant_message", "")
                 updated_history = turn_history + [
                     {"role": "user", "content": body.user_message},
