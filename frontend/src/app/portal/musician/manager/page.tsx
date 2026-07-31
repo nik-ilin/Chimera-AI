@@ -17,7 +17,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, Compass, Music2 } from "lucide-react";
 
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { loadTimeline } from "@/lib/manager-data";
 import { startOfMonth, startOfNextMonth } from "@/lib/calendar";
 import type { EventRow } from "@/types/supabase";
@@ -30,7 +30,7 @@ const TIMELINE_FUTURE_DAYS = 365;
 
 async function loadCurrentMonth(userId: string): Promise<EventRow[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
   const now = new Date();
 
   const { data, error } = await supabase

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import PostWritingClient from "./PostWritingClient";
@@ -23,7 +23,7 @@ export default async function PostWritingPage() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
   const { data: profile } = await supabase
     .from("user_profile")
     .select("*")

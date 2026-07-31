@@ -1,22 +1,57 @@
 /**
- * Supabase server client for use in Server Components and Route Handlers.
+ * Supabase server clients for Route Handlers and Server Components.
  *
- * Authenticates requests as the logged-in user by attaching the Supabase
- * JWT minted in the NextAuth session callback (anon key + Authorization
- * header). Postgres reads next_auth.uid() from that JWT's `sub` claim to enforce
- * the owner-only RLS policies — so this client can only ever touch the
- * caller's own rows.
+ * TWO clients, for two different security contexts:
  *
- * The service-role key is NOT used here. Only FastAPI uses the service-role
- * key (see backend/services/supabase.py).
+ * createClient()        — anon key + user JWT (RLS-enforced).
+ *                         Use when SUPABASE_JWT_SECRET is correctly set and the
+ *                         minted token verifies against the project's signing key.
+ *
+ * createServiceClient() — service-role key, bypasses RLS entirely.
+ *                         SAFE ONLY in Server Components and Route Handlers that
+ *                         already auth-guard with auth() and filter by
+ *                         session.user.id. The service-role key is a non-public
+ *                         env var and never reaches the browser.
+ *                         Used as the primary client because Supabase's
+ *                         "JWT Signing Keys" migration means the legacy
+ *                         SUPABASE_JWT_SECRET may not match the key PostgREST
+ *                         currently trusts, making user JWTs unreliable.
  *
  * See CONVENTIONS.md §1: Supabase, Sessions.
  */
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import type { Database } from "@/types/supabase";
 
+/**
+ * Service-role client — bypasses RLS.
+ *
+ * ONLY call this after validating the session with auth() and then filtering
+ * every query with .eq("user_id", session.user.id).  Those two layers together
+ * give the same ownership guarantee that RLS would provide.
+ */
+export function createServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "[supabase] NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set."
+    );
+  }
+  return createSupabaseClient<Database>(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/**
+ * Anon client with the user's Supabase JWT attached.
+ *
+ * Relies on SUPABASE_JWT_SECRET matching the key PostgREST trusts.
+ * Kept for backwards compatibility; prefer createServiceClient() in Route
+ * Handlers where auth() already enforces identity.
+ */
 export async function createClient() {
   const cookieStore = await cookies();
   const session = await auth();

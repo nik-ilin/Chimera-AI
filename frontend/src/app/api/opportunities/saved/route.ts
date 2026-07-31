@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import type { SavedOpportunityRow } from "@/types/supabase";
 
 const SaveSchema = z.object({
@@ -33,7 +33,7 @@ export async function GET() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
   const { data, error } = await supabase
     .from("saved_opportunities")
     .select("*")
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
   const { data, error } = await supabase
     .from("saved_opportunities")
     .upsert(
@@ -121,7 +121,7 @@ export async function DELETE(request: Request) {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
   const { error } = await supabase
     .from("saved_opportunities")
     .delete()

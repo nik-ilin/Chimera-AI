@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { UpdateEventSchema } from "@/lib/events-schema";
 import type { EventRow } from "@/types/supabase";
 
@@ -50,7 +50,7 @@ export async function PATCH(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
 
   const { data, error } = await supabase
     .from("events")
@@ -91,7 +91,7 @@ export async function DELETE(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
 
   // .select() so we can tell "deleted" from "matched nothing" — a bare delete
   // reports success either way, which would let the UI drop an event it never
