@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { CreateEventSchema, ListEventsQuerySchema } from "@/lib/events-schema";
 import type { EventRow } from "@/types/supabase";
 
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
 
   let query = supabase
     .from("events")
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
 
   const { data, error } = await supabase
     .from("events")

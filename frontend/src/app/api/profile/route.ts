@@ -15,7 +15,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/supabase";
 
 type UserProfileRow = Database["public"]["Tables"]["user_profile"]["Row"];
@@ -28,7 +28,7 @@ export async function GET() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = await createClient() as any;
+  const supabase = createServiceClient() as any;
 
   const { data, error } = await supabase
     .from("user_profile")
@@ -116,7 +116,7 @@ export async function PATCH(request: Request) {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = await createClient() as any;
+  const supabase = createServiceClient() as any;
 
   const { data, error } = await supabase
     .from("user_profile")

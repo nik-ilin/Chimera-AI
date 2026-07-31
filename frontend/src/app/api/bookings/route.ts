@@ -14,7 +14,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { syncExpense } from "@/lib/bookings";
 import type { BookingRow } from "@/types/supabase";
 
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
   }
 
   const eventId = new URL(request.url).searchParams.get("event_id");
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
 
   let query = supabase
     .from("bookings")
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
   const { data, error } = await supabase
     .from("bookings")
     .insert({ ...parsed.data, user_id: session.user.id })

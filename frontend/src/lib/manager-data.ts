@@ -11,7 +11,7 @@
  */
 import "server-only";
 
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import type {
   BookingRow,
   ContactRow,
@@ -51,7 +51,7 @@ export async function loadTimeline(
   userId: string,
   opts: { from?: string; to?: string; limit?: number } = {}
 ): Promise<TimelineEvent[]> {
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
 
   let query = supabase
     .from("events")
@@ -86,7 +86,7 @@ export async function loadTimeline(
 
 /** One gig with venue, promoter, bookings, expenses and a P&L rollup. */
 export async function loadGig(userId: string, eventId: string): Promise<GigBundle | null> {
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
 
   const { data: event, error } = await supabase
     .from("events")

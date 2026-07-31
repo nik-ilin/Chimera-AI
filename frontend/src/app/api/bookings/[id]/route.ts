@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { syncExpense } from "@/lib/bookings";
 import type { BookingRow } from "@/types/supabase";
 
@@ -66,7 +66,7 @@ export async function PATCH(
     );
   }
 
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
   const { data, error } = await supabase
     .from("bookings")
     .update({ ...parsed.data, updated_at: new Date().toISOString() })
@@ -104,7 +104,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
   // The expense row cascades via booking_id ON DELETE CASCADE (migration 007),
   // so there is nothing to clean up here.
   const { data, error } = await supabase

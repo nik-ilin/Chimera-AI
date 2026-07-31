@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import type { ContactRow } from "@/types/supabase";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -36,7 +36,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
   const { data, error } = await supabase
     .from("contacts")
     .select("*")
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
   }
 
   const { attach_to_event_id: attachTo, ...contact } = parsed.data;
-  const supabase = (await createClient()) as any;
+  const supabase = createServiceClient() as any;
 
   const { data, error } = await supabase
     .from("contacts")
