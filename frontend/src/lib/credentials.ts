@@ -27,16 +27,31 @@ const BCRYPT_COST = 12;
 
 /**
  * A real bcrypt hash of a random string nobody knows, used as the comparison
- * target when the email has no account. Computed once at module load so the
- * decoy comparison costs exactly what a real one costs.
+ * target when the email has no account.
  *
  * Without this, "no such user" would return in ~0ms while "wrong password"
  * takes ~250ms — a trivially measurable oracle for which emails are registered.
+ *
+ * LAZY: computed on first use, not at module load.
+ *
+ * The original top-level bcrypt.hashSync (cost 12 ≈ 330ms) ran synchronously
+ * during every Next.js module evaluation — auth.ts imports credentials.ts,
+ * and auth.ts is imported by every protected page. That blocked the compiler
+ * thread for 330ms on every cold compile, making ghostwrite/posts appear frozen
+ * while the dev server was simply stuck in a bcrypt spin. Moving it behind a
+ * getter means the cost is paid once, on the first failed sign-in attempt, and
+ * never during compilation.
  */
-const DECOY_HASH = bcrypt.hashSync(
-  "chimera-decoy-" + Math.random().toString(36),
-  BCRYPT_COST
-);
+let _decoyHash: string | null = null;
+function getDecoyHash(): string {
+  if (!_decoyHash) {
+    _decoyHash = bcrypt.hashSync(
+      "chimera-decoy-" + Math.random().toString(36),
+      BCRYPT_COST
+    );
+  }
+  return _decoyHash;
+}
 
 /** The only user shape this module ever hands out. Deliberately has no hash. */
 export interface SafeUser {
@@ -210,7 +225,7 @@ export async function verifyCredentials(
 
   if (!user) {
     // Burn the same ~250ms a real comparison would take.
-    await bcrypt.compare(password, DECOY_HASH);
+    await bcrypt.compare(password, getDecoyHash());
     return null;
   }
 
@@ -223,7 +238,7 @@ export async function verifyCredentials(
 
   if (error || !data?.password_hash) {
     // GitHub/Google-only account: exists, but has no password set.
-    await bcrypt.compare(password, DECOY_HASH);
+    await bcrypt.compare(password, getDecoyHash());
     return null;
   }
 
