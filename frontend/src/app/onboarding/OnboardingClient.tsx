@@ -161,6 +161,7 @@ export default function OnboardingClient() {
               note="Editorial creator portrait"
               rounded="rounded-2xl"
               className="border-chimera-cream/10 bg-chimera-cream/5 max-w-[240px]"
+              src="/images/onboarding-aside.jpeg"
             />
           </div>
           <p className="font-display text-2xl leading-snug text-chimera-cream/90 max-w-[24ch]">

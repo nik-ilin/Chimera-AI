@@ -8,7 +8,7 @@
  * Stage B: presentation restyled only. The streaming hook, SSE parsing,
  * progress states, and all wiring are unchanged from Stage A/A.5.
  */
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -136,6 +136,11 @@ interface PostWritingClientProps {
 export default function PostWritingClient({ profileContext }: PostWritingClientProps) {
   const { status, result, error, liveText, tokenCount, generate } = useCaptionsStream();
   const [copied, setCopied] = useState<number | null>(null);
+
+  // Mark this module as visited so the Getting Started rail can tick it off.
+  useEffect(() => {
+    localStorage.setItem("chimera:visited:posts", "1");
+  }, []);
 
   const busy = status === "sending" || status === "streaming";
 
@@ -318,6 +323,7 @@ export default function PostWritingClient({ profileContext }: PostWritingClientP
             aspect="1/1"
             note="Caption studio empty-state mark"
             className="max-w-[160px]"
+            src="/images/posts-empty.jpeg"
           />
           <p className="mt-4 text-sm text-muted-foreground max-w-xs">
             Fill in the brief above and hit generate — your captions appear here.

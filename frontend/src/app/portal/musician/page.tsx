@@ -12,6 +12,7 @@ import { redirect } from "next/navigation";
 import { Music2, Calendar, ImageIcon, PenLine, Mic2, ArrowUpRight, Lock } from "lucide-react";
 import Link from "next/link";
 import ImagePlaceholder from "@/components/ImagePlaceholder";
+import GettingStartedRail from "@/components/GettingStartedRail";
 
 const modules = [
   {
@@ -54,12 +55,6 @@ const modules = [
     href: "/portal/musician/visual",
     available: false, // Phase 4
   },
-];
-
-const gettingStarted = [
-  { n: "01", label: "Set your creator profile", done: true },
-  { n: "02", label: "Write your first captions", href: "/portal/musician/posts" },
-  { n: "03", label: "Draft a verse with the ghostwriter", href: "/portal/musician/ghostwrite" },
 ];
 
 export default async function MusicianPortalPage() {
@@ -123,6 +118,7 @@ export default async function MusicianPortalPage() {
                   note="Avatar"
                   rounded="rounded-2xl"
                   className="w-14 shrink-0 border-chimera-cream/10 bg-chimera-cream/5"
+                  src="/images/portal-avatar.jpeg"
                 />
                 <div className="min-w-0">
                   <div className="font-semibold text-chimera-cream truncate">{name}</div>
@@ -146,48 +142,7 @@ export default async function MusicianPortalPage() {
             </div>
 
             {/* Getting started rail */}
-            <div
-              className="widget p-6 animate-fade-up"
-              style={{ animationDelay: "120ms" }}
-            >
-              <div className="u-label text-muted-foreground mb-4">Getting started</div>
-              <ol className="flex flex-col gap-1">
-                {gettingStarted.map((step) => {
-                  const inner = (
-                    <div className="flex items-center gap-3 rounded-2xl px-3 py-2.5 -mx-3 transition-colors hover:bg-secondary/60 group">
-                      <span
-                        className={[
-                          "font-mono text-xs w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
-                          step.done
-                            ? "bg-chimera-clay text-chimera-cream"
-                            : "bg-secondary text-muted-foreground",
-                        ].join(" ")}
-                      >
-                        {step.done ? "✓" : step.n}
-                      </span>
-                      <span
-                        className={[
-                          "text-sm flex-1",
-                          step.done ? "text-muted-foreground line-through" : "text-foreground",
-                        ].join(" ")}
-                      >
-                        {step.label}
-                      </span>
-                      {step.href && !step.done && (
-                        <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-chimera-clay transition-colors" />
-                      )}
-                    </div>
-                  );
-                  return step.href && !step.done ? (
-                    <Link key={step.n} href={step.href}>
-                      {inner}
-                    </Link>
-                  ) : (
-                    <div key={step.n}>{inner}</div>
-                  );
-                })}
-              </ol>
-            </div>
+            <GettingStartedRail />
           </aside>
 
           {/* ── Right: module widgets ── */}
@@ -212,6 +167,7 @@ export default async function MusicianPortalPage() {
                         aspect="4/3"
                         note={mod.title}
                         className={mod.available ? "" : "opacity-50"}
+                        src={`/images/${mod.thumb}.jpeg`}
                       />
                       <div className="absolute top-3 left-3 w-9 h-9 rounded-xl bg-card/90 backdrop-blur flex items-center justify-center shadow-soft">
                         <Icon className="w-4 h-4 text-chimera-clay" />
