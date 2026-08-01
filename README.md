@@ -4,7 +4,7 @@
 
 **A digital record label for artists who don't have one.**
 
-![Chimera](docs/screenshots/hero.png)
+![Chimera](https://github.com/nik-ilin/Chimera-AI/blob/master/main%20photo.png)
 
 </div>
 
