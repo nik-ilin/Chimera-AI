@@ -1,246 +1,101 @@
-# Chimera — your AI-powered record label
+<div align="center">
 
-Chimera gives independent creators the tools of a major label — a personal
-manager, visual design, copywriting, and ghostwriting — as one AI-native studio
-powered by **IBM watsonx / Granite**.
+# Chimera
 
-Built for the **IBM AI Builders Challenge — “Reimagine Creative Industries with AI.”**
+**A digital record label for artists who don't have one.**
 
----
+![Chimera](docs/screenshots/hero.png)
 
-## The problem
-
-Independent musicians do everything themselves: writing captions, drafting
-lyrics, briefing cover art, chasing gigs. Major-label artists have teams for all
-of it. The tooling that exists is generic (a chatbot in a box) and forgets who
-the artist is between tasks.
-
-**Chimera is a creative studio that knows the artist.** A single `CreatorContext`
-(stage name, genre, city, brand vibe, socials, recent outputs) is injected into
-every AI task, so captions, lyrics, and art briefs all sound like *that* artist —
-consistently, across modules.
-
-**Who it's for:** independent musicians and self-managing creators who want
-label-grade output without a label.
+</div>
 
 ---
 
-## What it does (modules)
+> **Status:** in active development.
+>
+> The AI layer runs on IBM Granite through watsonx. Granite is a small open model, which keeps running costs low but also caps output quality; longer generations come out rougher than they would on a larger commercial model.
+>
+> **Coming soon:** an Influencer module, a Video creator module, and support for stronger image and video generation models.
 
-| Module | What it does | Status |
-|--------|--------------|--------|
-| **Onboarding router** | Describe yourself → Granite classifies you (musician / influencer / video-creator) → routes you into the right portal | ✅ Live |
-| **Post Writing** | Generates 3 platform-native Instagram/TikTok caption variants with hashtags, **streaming token-by-token** | ✅ Live |
-| **Ghostwriting** | Chat-style lyric assistant — structured sections, rhyme labels & syllable counts, **multi-turn memory** that persists and resumes | ✅ Live |
-| **Visual Design** | Expands a rough brief into a detailed Stable-Diffusion prompt (`build_image_brief`) + image generation | 🔒 Backend task built; UI on the roadmap |
-| **Personal Manager** | Calendar, promoter outreach, concert-opportunity finder | 🗺️ Roadmap |
+## Why
 
-Only the **Musician** portal is open; Influencer and Video-Creator are visible
-but locked.
+Most independent musicians write their own songs, shoot their own content, book their own shows and manage their own calendar. A signed artist gets a team for all of that.
 
----
+Chimera is an attempt to close that gap: a single portal that covers the work of a manager, a copywriter, a graphic designer and a booking agent. Everything it produces is based on your artist profile, so the output changes depending on who is using it.
 
-## Architecture
+It is built for independent and emerging artists releasing music without a label, a manager or a marketing team behind them.
 
-```mermaid
-flowchart TD
-    UI["Next.js 14 App Router UI<br/>Onboarding · Post Writing · Ghostwriting"]
+## Modules
 
-    subgraph Next["Next.js server (Vercel)"]
-        RH["Route Handlers<br/>/api/ai/* · /api/profile · /api/auth/*"]
-        NA["NextAuth v5 (Auth.js)<br/>@auth/supabase-adapter"]
-    end
+Each module maps to a real role inside a traditional label.
 
-    subgraph FastAPI["FastAPI AI microservice (Railway/Render)"]
-        GUARD["Service-token guard + CORS + rate limit"]
-        EXEC["Task executor"]
-        REG["Task registry + prompts<br/>(prompt-injection defence)"]
-        LLM["LLM abstraction (services/llm.py)"]
-    end
+### ✅ Ghostwriting
 
-    subgraph Data["Supabase — Postgres + RLS"]
-        AUTHT["next_auth schema"]
-        PROF["user_profile (RLS)"]
-        LYR["lyric_sessions (RLS)"]
-    end
+A writing assistant for lyrics. It reads the rhyme scheme and meter of what you have already written, and suggests lines that fit the pattern.
 
-    WX["IBM watsonx.ai · Granite (streaming)"]
-    LF["LangFlow chains"]
+### ✅ Post Writing
 
-    UI -->|fetch / SSE| RH
-    UI --> NA
-    NA -->|minted Supabase JWT| PROF
-    RH -->|Bearer SERVICE_TOKEN| GUARD
-    GUARD --> EXEC --> REG --> LLM
-    LLM -->|stream| WX
-    LLM -.->|optional| LF --> WX
-    EXEC --> LYR
-    NA --> AUTHT
-```
+Captions and copy for Instagram and TikTok, written from your artist profile so they carry your voice rather than a generic one.
 
-### The trust boundary (security by design)
-The browser never holds a third-party secret. It talks **only** to Next.js.
-Next.js Route Handlers attach a shared `CHIMERA_SERVICE_TOKEN` and talk to
-FastAPI. FastAPI talks to watsonx / HuggingFace / Supabase. Every FastAPI route
-is guarded by a **timing-safe** service-token check; there are no public AI
-routes.
+### 🚧 Personal Manager
 
-### Identity & Row-Level Security
-Auth is **NextAuth v5** with the Supabase adapter — users live in a dedicated
-`next_auth` schema. On each session we **mint a Supabase-compatible JWT** (signed
-with `SUPABASE_JWT_SECRET`, `role: authenticated`, `sub = user id`) and attach it
-to the Supabase client, so Route Handlers read/write the database **as the
-authenticated user under RLS** (`next_auth.uid() = user_id`). RLS is enabled on
-**every table from the first migration** — the anon key is treated as public.
+Calendar, tour dates and bookings in one place. It syncs with Google Calendar and CalDAV, and confirmed dates feed into a map and a running budget.
 
-### The AI core
-- **One LLM abstraction** (`services/llm.py`) wraps IBM watsonx `ChatWatsonx`.
-  The blocking client build + inference run in worker threads (the event loop is
-  never blocked); clients are cached per task-params; the model is swappable via
-  `GRANITE_MODEL_ID`.
-- **Task registry** — each task (`classify_creator`, `write_captions`,
-  `write_lyrics`, `build_image_brief`) carries its own temperature/max-tokens and
-  a strict Pydantic **output schema**, with one automatic repair retry on invalid
-  JSON.
-- **Prompt architecture** — a shared four-block skeleton (system role · creator
-  context · task + schema · user input). User text is wrapped in `<user_input>`
-  tags and the system prompt forbids those tags from overriding instructions —
-  **prompt-injection defence** built in.
-- **True token streaming** — watsonx streams tokens → FastAPI emits SSE
-  (`token` → `result`) → the Next Route Handler pipes it through unbuffered →
-  the client renders live text with a progress indicator.
-- **LangFlow** — visual orchestration chains are authored for each task
-  (`langflow/*.json`); the backend can route through LangFlow (`langflow_client`)
-  or call watsonx directly via the LLM abstraction (the current default path).
+### 🚧 Visual Design
 
----
+Cover art and promotional images, generated from the release, its genre and the visual identity you already use.
 
-## Tech stack
+## Stack
 
 | Layer | Tech |
-|-------|------|
-| Frontend | Next.js 14 (App Router, TypeScript), Tailwind CSS, shadcn/ui, Fraunces + Geist, Lenis motion |
-| Auth | NextAuth v5 (Auth.js) + `@auth/supabase-adapter`, GitHub OAuth |
-| Backend | FastAPI, Pydantic v2, slowapi (rate limiting), structlog |
-| AI | IBM watsonx.ai · Granite (via `langchain-ibm`), LangFlow |
-| Data | Supabase (Postgres + Row-Level Security) |
-| Images (roadmap) | HuggingFace (Stable Diffusion XL) |
+|---|---|
+| Frontend | Next.js (App Router), auth via GitHub / Google / email |
+| Backend | Python (FastAPI) |
+| Database | Supabase (Postgres) with row-level security |
+| AI core | IBM Granite via watsonx |
+| Orchestration | LangChain + LangFlow |
 
----
+**Why Granite.** The model is open and IBM documents its training data, which matters when the input is unreleased material. It is also inexpensive to run, which keeps the tool free for the artists using it.
 
-## How we used IBM Bob
+LangChain and LangFlow handle orchestration between the modules, so context from one is available to the others.
 
-**IBM Bob was the primary development tool for the foundation of this project.**
-Its contributions are recorded in git — every Bob-assisted commit carries an
-`Assisted-by: IBM Bob` trailer:
+## Repo structure
+
+```
+chimera/
+├── frontend/          Next.js app
+│   └── src/app/
+│       └── portal/    The four modules
+├── backend/           FastAPI service
+│   ├── db/migrations/ Run these in order
+│   └── main.py
+├── langflow/          Chain definitions
+└── docs/
+```
+
+## Getting started
+
+**Requirements:** Node.js 20+, Python 3.11+, a Supabase project, and an IBM Cloud account with watsonx access.
+
+### 1. Clone
 
 ```bash
-git log --grep="Assisted-by: IBM Bob" --format="%h %s"
+git clone https://github.com/YOUR_USERNAME/chimera.git
+cd chimera
 ```
 
-- **Phase 1 — full-stack foundation:** project conventions & security policy,
-  the FastAPI microservice scaffold, the Next.js App Router scaffold, and the
-  initial Supabase schema with **RLS from line one**.
-  _(commits `14f2473`, `bf05f94`, `85f17b8`, `dafc494`, `38fee4c`)_
-- **Phase 2 — the AI core:** the single LLM abstraction, the task registry &
-  per-task params, the prompt architecture with injection defence, the four AI
-  routes, and the LangFlow chains.
-  _(commits `7f5ea5d`, `b83aaf7`, `7146533`)_
+### 2. Database
 
-Phase 3 (the frontend UI, streaming integration, and design/motion system) and
-the reliability fixes were built on top of that Bob-authored foundation.
+Run the migrations in `backend/db/migrations/` against your Supabase project, in order, via the Supabase SQL editor.
 
----
+### 3. Backend
 
-## Why it matters for “Reimagine Creative Industries with AI”
+Start here: the frontend will not work without it.
 
-Chimera reimagines the **record label** itself: instead of a chatbot bolted onto
-a creative task, it's an AI studio organised around the artist's identity, where
-IBM Granite does the creative heavy lifting (classification, copy, lyrics, art
-direction) behind a secure, production-shaped architecture. It lowers the floor
-for independent creators to produce label-grade work — the exact leverage the
-challenge asks for.
-
----
-
-## Setup
-
-### Prerequisites
-- Node 18+, Python 3.11+
-- A Supabase project, an IBM watsonx.ai project, a GitHub OAuth app
-
-### 1. Database (Supabase → SQL Editor, in order)
-```
-backend/db/migrations/001_initial_schema.sql
-backend/db/migrations/002_next_auth_schema.sql
-backend/db/migrations/003_repoint_user_profile_to_next_auth.sql
-backend/db/migrations/004_lyric_sessions.sql
-```
-Then **expose the `next_auth` schema**: Supabase → Project Settings → API →
-Exposed schemas → add `next_auth`.
-
-### 2. Backend (FastAPI)
 ```bash
 cd backend
-python -m venv venv && source venv/bin/activate
+cp .env.example .env          # fill in the values — each one is documented in the file
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-cp ../.env.example .env   # fill in the backend values
-uvicorn main:app --port 8000
-```
-
-### 3. Frontend (Next.js)
-```bash
-cd frontend
-npm install
-cp ../.env.example .env.local   # fill in the frontend values
-npm run dev                     # dev on :3005 (port 3000 is often taken)
-# production:
-npm run build && npm run start -- -p 3005
-```
-
-### Environment variables
-See [`.env.example`](.env.example) for the full annotated list. The essentials:
-
-**Frontend (`frontend/.env.local`)**
-| Var | Purpose |
-|-----|---------|
-| `AUTH_SECRET` | NextAuth session secret (`openssl rand -base64 32`) |
-| `AUTH_URL` | Public app URL (`http://localhost:3005` or the deployed domain) |
-| `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | GitHub OAuth app |
-| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase public keys |
-| `SUPABASE_SERVICE_ROLE_KEY` | Used server-side by the Supabase adapter |
-| `SUPABASE_JWT_SECRET` | Signs the per-user Supabase JWT (RLS) |
-| `FASTAPI_INTERNAL_URL` | FastAPI base URL (`http://localhost:8000`) |
-| `CHIMERA_SERVICE_TOKEN` | Shared secret sent to FastAPI (must match backend) |
-
-**Backend (`backend/.env`)**
-| Var | Purpose |
-|-----|---------|
-| `CHIMERA_SERVICE_TOKEN` | Must match the frontend value |
-| `ALLOWED_ORIGINS` | CORS allow-list (the frontend origin) |
-| `WATSONX_API_KEY` / `WATSONX_PROJECT_ID` / `WATSONX_URL` | IBM watsonx.ai |
-| `GRANITE_MODEL_ID` | e.g. `ibm/granite-8b-code-instruct` |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | DB access (service role) |
-
-> The watsonx **project must be associated with a Watson Machine Learning
-> instance**, and `WATSONX_URL` must match its region — otherwise the first
-> inference call errors.
-
----
-
-## Current status
-
-**Live & verified end-to-end:** GitHub sign-in → onboarding classification →
-Musician portal → Post Writing (streaming captions) → Ghostwriting (streaming,
-multi-turn lyrics that persist and resume under RLS).
-
-**Roadmap:** Visual Design UI (the `build_image_brief` task + HuggingFace image
-generation), Personal Manager, Influencer & Video-Creator portals.
-
-Chimera is a hackathon prototype: the demo path is solid, and the locked modules
-are deliberately locked rather than half-built.
-
----
-
-_Deployment notes: [`DEPLOYMENT.md`](DEPLOYMENT.md) · Engineering conventions:
-[`CONVENTIONS.md`](CONVENTIONS.md)._
+uvicorn main:app --reload --port 8000
+... (32 líneas restantes)
