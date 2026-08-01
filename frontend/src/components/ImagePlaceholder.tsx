@@ -44,13 +44,14 @@ export default function ImagePlaceholder({
 
   if (src) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt={note ?? id}
-        style={style}
-        className={`${rounded} object-cover w-full ${className}`}
-      />
+      <div style={style} className={`${rounded} relative w-full overflow-hidden ${className}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={note ?? id}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      </div>
     );
   }
 
