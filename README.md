@@ -16,6 +16,7 @@
 >
 > **Coming soon:** an Influencer module, a Video creator module, and support for stronger image and video generation models.
 
+## Try here: https://chimera-ai-coral.vercel.app
 ## Why
 
 Most independent musicians write their own songs, shoot their own content, book their own shows and manage their own calendar. A signed artist gets a team for all of that.
