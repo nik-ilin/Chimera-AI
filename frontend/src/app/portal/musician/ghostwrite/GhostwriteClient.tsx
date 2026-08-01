@@ -68,6 +68,11 @@ export default function GhostwriteClient({
   const [message, setMessage] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
+  // Mark this module as visited so the Getting Started rail can tick it off.
+  useEffect(() => {
+    localStorage.setItem("chimera:visited:ghostwrite", "1");
+  }, []);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns, status]);
@@ -231,6 +236,7 @@ export default function GhostwriteClient({
               aspect="1/1"
               note="Blank lyric session mark"
               className="max-w-[150px] mb-5"
+              src="/images/ghostwrite-empty.jpeg"
             />
             <p className="max-w-xs">
               Describe the song you want to write — mood, story, references.

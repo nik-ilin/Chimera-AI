@@ -10,7 +10,7 @@
  * Owns the command palette and the create dialog so every view gets both for
  * free.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CalendarDays, List, Map as MapIcon, Plug, Plus } from "lucide-react";
@@ -42,6 +42,12 @@ export default function ManagerShell({
   openNew: boolean;
 }) {
   const router = useRouter();
+
+  // Mark this module as visited so the Getting Started rail can tick it off.
+  useEffect(() => {
+    localStorage.setItem("chimera:visited:manager", "1");
+  }, []);
+
   const [view, setView] = useState<View>("timeline");
   const [timeline, setTimeline] = useState(initialTimeline);
   const [creating, setCreating] = useState(openNew);

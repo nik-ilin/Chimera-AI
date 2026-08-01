@@ -88,6 +88,7 @@ export default async function LandingPage() {
                 note="Abstract editorial artwork — AI-native record label, chromatic ink bloom on warm paper"
                 rounded="rounded-widget-lg"
                 className="shadow-widget-lg rotate-[2deg]"
+                src="/images/landing-hero.jpeg"
               />
             </Reveal>
           </Parallax>
@@ -99,6 +100,7 @@ export default async function LandingPage() {
                 note="Close-up detail crop — grain, warm light, texture"
                 rounded="rounded-widget"
                 className="shadow-widget-lg -rotate-[3deg]"
+                src="/images/landing-detail.jpeg"
               />
             </Reveal>
           </Parallax>
@@ -171,6 +173,7 @@ export default async function LandingPage() {
               aspect="16/6"
               note="Soft grain/gradient texture strip, cream→clay tones"
               rounded="rounded-widget-lg"
+              src="/images/landing-texture.jpeg"
             />
             <div className="absolute inset-0 flex items-end justify-between p-6">
               <span className="font-editorial text-2xl text-foreground/70">Chimera</span>
